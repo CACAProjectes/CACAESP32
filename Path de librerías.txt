@@ -1,1 +1,8 @@
+HP Portátil
 c:\Users\jcamposp\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.1.0\libraries\
+
+HP AllInOne
+c:\Users\campo\AppData\Local\Arduino15\packages\esp32\hardware\esp32\3.1.0\libraries\
+
+Nologo ESP32C3 Super Mini on COM3
+ESP32-WROOM-32D
