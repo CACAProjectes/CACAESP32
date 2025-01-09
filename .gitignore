@@ -2,3 +2,4 @@
 *.exe
 CP210X_Windows_Drivers/
 *.rar
+*.class
