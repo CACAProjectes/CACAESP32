@@ -4,3 +4,4 @@ CP210X_Windows_Drivers/
 *.rar
 *.class
 CACA_ESP32-WROOM/WrkESP32_WROOM/.metadata
+WrkESP32_WROOM/.metadata/
