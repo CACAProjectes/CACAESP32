@@ -1,0 +1,18 @@
+Scan done
+15 networks found
+Nr | SSID                             | RSSI | CH | Encryption
+ 1 | sercommBA1967                    |  -64 |  6 | WPA2
+ 2 | MiFibra-7D18                     |  -65 |  1 | WPA2
+ 3 | DIGIFIBRA-70E7                   |  -72 |  5 | WPA2
+ 4 | sercommBB5219                    |  -79 | 13 | WPA2
+ 5 | vodafoneBA2564                   |  -85 |  4 | WPA2
+ 6 | MiFibra-2BF9-24G                 |  -85 | 11 | WPA2
+ 7 | MOVISTAR_9D9E                    |  -87 |  6 | WPA2
+ 8 | Casapitus                        |  -87 |  6 | WPA2
+ 9 | vodafoneBA2118                   |  -88 | 13 | WPA2
+10 | MOVISTAR_67F0                    |  -89 |  1 | WPA2
+11 | MOVISTAR_FD60                    |  -89 |  1 | WPA2
+12 | MOVISTAR_4CB0                    |  -89 | 11 | WPA2
+13 | MiFibra-0ACD                     |  -91 |  1 | WPA2
+14 | sercommBB7220                    |  -92 |  1 | WPA2
+15 | MiFibra-0ACD-24G                 |  -93 |  1 | WPA2
