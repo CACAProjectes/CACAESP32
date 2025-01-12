@@ -1,6 +1,0 @@
-<resources>
-    <string name="app_name">AppPrueba</string>
-    <string name="label_texto">Texto: </string>
-    <string name="label_enviar">Enviar</string>
-    <string name="mensaje_bienvenida">Bienvenido App Cliente</string>
-</resources>
