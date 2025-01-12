@@ -2,66 +2,142 @@
   CACA Serial Luces
  */
 //
-const int ledPinPrueba = 4;     // LED pin de la placa
 // DATOS EN SERIE
-const int pinSERIE_RST =  9;    // Pin SERIE RESET
-const int pinSERIE_CLK =  10;   // Pin SERIE CLOCK
-const int pinSERIE_DAT =  8;    // Pin SERIE DATA
-//
+const int dataPin = 8;   // SER
+const int clockPin = 9;  // SRCLK
+const int latchPin = 10;  // RCLK
+// Variables internas
 int contadorGeneral = 0;  // Contador general de tiempos
-int inByte = 0;
+char inSerial = 0;        // Entrada del Serial estándar
+String currentLine = "";  // String de la entrada Serial estándar
+int iPos = -1;            // Posición de los comandos en el String Serial Stándar
+int iContador = 0;        // Contador de bucle
+// BUCLE
+int CTE_MIN_BUCLE = 1;
+int CTE_MAX_BUCLE = 10;
+// Botones ACTIVOS
+boolean bIntermitenteIzq  = true;
+boolean bIntermitenteDer  = true;
+boolean bSirena           = true;
+boolean bPosicion         = false;
+boolean bCruce            = false;
+boolean bCarretera        = false;
+// Máscaras de LUCES
+byte CTE_IntermDerON  = 0b10000000;	// U1 - QA
+byte CTE_IntermIzqON  = 0b01000000;	// U1 - QB
+byte CTE_SirenaBON  	= 0b00100000;	// U1 - QC
+byte CTE_SirenaGON  	= 0b00010000;	// U1 - QD
+byte CTE_SirenaRON  	= 0b00001000;	// U1 - QE
+// String de salida
+byte iRespuesta1      = 0b00000000;
+byte iRespuesta2      = 0b00000000;
 
 void setup() {
-  // inicializar PINs IN-OUT
-  pinMode(ledPinPrueba, OUTPUT);
   //
-  pinMode(pinSERIE_RST, OUTPUT);
-  pinMode(pinSERIE_CLK, OUTPUT);
-  pinMode(pinSERIE_DAT, OUTPUT);
+  pinMode(latchPin, OUTPUT);
+  pinMode(dataPin, OUTPUT);
+  pinMode(clockPin, OUTPUT);
   // initialize serial communication at 9600 bits per second:
   Serial.begin(115200);
-  // activar el SERIAL-DATA - RST=HIGH
-  digitalWrite(pinSERIE_RST, HIGH);  
 }
 
 void loop() {
-  //blinkLed();
+  for (iContador=CTE_MIN_BUCLE;iContador<=CTE_MAX_BUCLE;iContador++) {
+    ////////////////
+    // Intermitentes
+    ////////////////
+    if (bIntermitenteIzq && iContador <= CTE_MAX_BUCLE/2) 
+      // Intermitente Izq ON
+      iRespuesta2 = iRespuesta2 | CTE_IntermIzqON;	
+    if (bIntermitenteIzq && iContador > CTE_MAX_BUCLE/2) 
+      // Intermitente Izq OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	
+    if (bIntermitenteDer && iContador <= CTE_MAX_BUCLE/2) 
+      // Intermitente Der ON
+      iRespuesta2 = iRespuesta2 | CTE_IntermDerON;
+    if (bIntermitenteDer && iContador > CTE_MAX_BUCLE/2) 
+      // Intermitente Der OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	
+    ////////////////
+    // Sirena
+    ////////////////
+    if (bSirena && iContador >= CTE_MIN_BUCLE && iContador <= CTE_MIN_BUCLE + 2) {
+      // Sirena B
+      iRespuesta2 = iRespuesta2 | CTE_SirenaBON;	
+      iRespuesta2 = iRespuesta2 & ~CTE_SirenaRON;	
+    }
+    if (bSirena && iContador == CTE_MIN_BUCLE + 3) {
+      // Sirena R
+      iRespuesta2 = iRespuesta2 & ~CTE_SirenaBON;	
+      iRespuesta2 = iRespuesta2 | CTE_SirenaRON;	
+    }
+    if (bSirena && iContador >= CTE_MIN_BUCLE + 4 && iContador <= CTE_MIN_BUCLE + 6) {
+      // Sirena B
+      iRespuesta2 = iRespuesta2 | CTE_SirenaBON;	
+      iRespuesta2 = iRespuesta2 & ~CTE_SirenaRON;	
+    }
+    if (bSirena && iContador >= CTE_MIN_BUCLE + 7 && iContador <= CTE_MIN_BUCLE + 9) {
+      // Sirena R
+      iRespuesta2 = iRespuesta2 & ~CTE_SirenaBON;	
+      iRespuesta2 = iRespuesta2 | CTE_SirenaRON;	
+    }
+    //  APAGADO GENERAL SI SE SOLICITA
+    if (!bSirena) {
+      // Sirena OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_SirenaBON;	
+      iRespuesta2 = iRespuesta2 & ~CTE_SirenaRON;				
+    }
+    if (!bIntermitenteIzq) {
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;
+    }
+    if (!bIntermitenteDer) {
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;
+    }      
+    //  ENVIAR AL ESP32-SERIAL-595
+    setRegister();
+    //
+    leerSerial();
+    //
+    delay(150);
+  }
+}
+
+void leerSerial() {
   // read from port 0, send to port 1:
   if (Serial.available()) {
-    inByte = Serial.read();
-    Serial.write(inByte);
-    contadorGeneral = 1;
+    currentLine = "";
+    do {
+      inSerial = Serial.read();
+      currentLine += inSerial;
+    } while (inSerial != '\n');
+    ///////////////////////
+    // Comprobar comandos
+    ///////////////////////
+    // INTERMITENTE - DERECHO - S/N
+    iPos = currentLine.indexOf("INTD=");
+    if (iPos >= 0) {
+      bIntermitenteDer = (currentLine.substring(iPos+5, iPos+5+1) == "S");
+    }
+    // INTERMITENTE - IZQUIERDO - S/N
+    iPos = currentLine.indexOf("INTI=");
+    if (iPos >= 0) {
+      bIntermitenteIzq = (currentLine.substring(iPos+5, iPos+5+1) == "S");
+    }
+    // INTERMITENTE - SIRENA - S/N
+    iPos = currentLine.indexOf("SIRE=");
+    if (iPos >= 0) {
+      bSirena = (currentLine.substring(iPos+5, iPos+5+1) == "S");
+    }
+    //
+    Serial.print("currentLine: " + currentLine);
   }
-  //  
-  //shiftOut(pinSERIE_DAT, pinSERIE_CLK, LSBFIRST, B10101010); // send this binary value to the shift register
-  if (contadorGeneral == 1 && inByte != 10) {
-    //shiftOut(pinSERIE_DAT, pinSERIE_CLK, MSBFIRST, inByte); // send this binary value to the shift register
-    shiftOut(pinSERIE_DAT, pinSERIE_CLK, MSBFIRST, B10101010); // send this binary value to the shift register
-    shiftOut(pinSERIE_DAT, pinSERIE_CLK, MSBFIRST, B10101010); // send this binary value to the shift register
-    Serial.write("Enviado!");
-    contadorGeneral = 0;
-  }
-  /*
-  for (int j = 0; j < 256; j++) {
-    //ground latchPin and hold low for as long as you are transmitting
-    //digitalWrite(latchPin, LOW);
-    shiftOut(pinSERIE_DAT, pinSERIE_CLK, MSBFIRST, j);
-    //return the latch pin high to signal chip that it
-    //no longer needs to listen for information
-    //digitalWrite(latchPin, HIGH);
-    delay(1000);
-  }
-  */
-  //
-  delay(1000);
-  }
-
-void blinkLed() {
-  contadorGeneral++;
-  if (contadorGeneral >= 0 && contadorGeneral < 50)
-    digitalWrite(ledPinPrueba, HIGH);   // turn the LED on (HIGH is the voltage level)
-  else if (contadorGeneral >= 50 &&  contadorGeneral < 100)
-    digitalWrite(ledPinPrueba, LOW);    // turn the LED off by making the voltage LOW
-  else 
-    contadorGeneral = 0;
 }
+
+void setRegister() {
+  // Bloquea el Serial 595, envía el byte1 y después el byte2 y desbloque el Serial 595
+  digitalWrite(latchPin, LOW);
+  shiftOut(dataPin, clockPin, LSBFIRST, iRespuesta1); 
+  shiftOut(dataPin, clockPin, LSBFIRST, iRespuesta2); 
+  digitalWrite(latchPin, HIGH);
+}
+
