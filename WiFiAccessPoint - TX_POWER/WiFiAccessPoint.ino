@@ -15,7 +15,6 @@
 #include <NetworkClient.h>
 #include <WiFiAP.h>
 #include "esp_wifi.h"
-#include "pagina_web.h"
 
 //#ifndef LED_BUILTIN
 //#define LED_BUILTIN 2  // Set the GPIO pin where you connected your test LED or comment this line out if your dev board has a built-in LED
@@ -76,9 +75,8 @@ void loop() {
             client.println();
 
             // the content of the HTTP response follows the header:
-            //client.print("Click <a href=\"/H\">here</a> to turn ON the LED.<br>");
-            //client.print("Click <a href=\"/L\">here</a> to turn OFF the LED.<br>");
-            client.print(pagina_web);
+            client.print("Click <a href=\"/H\">here</a> to turn ON the LED.<br>");
+            client.print("Click <a href=\"/L\">here</a> to turn OFF the LED.<br>");
 
             // The HTTP response ends with another blank line:
             client.println();
@@ -105,19 +103,3 @@ void loop() {
     Serial.println("Client Disconnected.");
   }
 }
-
-// Set VAR PAGINA HTML
-/*
-const char *pagina_web = "<!doctype html>";
-*pagina_web += "<html lang=\"es\">";
-*pagina_web += "<head>";
-*pagina_web += "<title>P R I N C I P A L</title>";
-*pagina_web += "<meta charset=\"UTF-8\">";
-*pagina_web += "<meta http-equiv=\"refresh\" content=\"100; url=./K\">";
-*pagina_web += "</head>";
-*pagina_web += "<html>";
-*pagina_web += "<body>";
-*pagina_web += "Hi gays";
-*pagina_web += "</body>";
-*pagina_web += "</html>";
-*/
