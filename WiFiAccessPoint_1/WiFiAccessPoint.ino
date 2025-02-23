@@ -20,7 +20,7 @@
 //#endif
 
 // Set these to your desired credentials.
-const char *ssid = "CACA_ESP32_C3";
+const char *ssid = "CACA_ESP32_WROOM";
 const char *password = "12345678";
 int LED_BUILTIN = 4;
 
@@ -43,7 +43,7 @@ void setup() {
   Serial.print("AP IP address: ");
   Serial.println(myIP);
   Serial.print("LED: ");
-  Serial.println("" + String(LED_BUILTIN));
+  Serial.println("" + LED_BUILTIN);
   server.begin();
 
   Serial.println("Server started");
