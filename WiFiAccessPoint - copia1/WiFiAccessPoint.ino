@@ -17,7 +17,6 @@
 #include "esp_wifi.h"
 
 #define LED_BUILTIN 4  // Set the GPIO pin where you connected your test LED or comment this line out if your dev board has a built-in LED
-#define SENSOR_LUZ  5
 
 // DATOS EN SERIE
 const int dataPin         = 8;   // SER
@@ -69,12 +68,12 @@ int mContador             = CTE_MIN_BUCLE;
 NetworkServer server(80);
 
 void setup() {
-  // PIN_MODE
-  pinMode(LED_BUILTIN, OUTPUT); // Led interno ESP32C3  
-  //
+  pinMode(LED_BUILTIN, OUTPUT);
+
   Serial.begin(115200);
   Serial.println();
   Serial.println("Configuring access point...");
+
   // You can remove the password parameter if you want the AP to be open.
   // a valid password must have more than 7 characters
   WiFi.mode(WIFI_AP);
@@ -157,9 +156,6 @@ void setRegister() {
   digitalWrite(latchPin, HIGH);
 }
 void gestionarActuadores() {
-    //
-    int sensorLuz = analogRead(SENSOR_LUZ);               // PIN 5
-    int valorLuz = map(sensorLuz,0,4095,0,100);
     ////////////////
     // Intermitentes
     ////////////////
@@ -314,17 +310,7 @@ void gestionarPeticiones(String pCurrentLine) {
     }
 
 }
-
-String getSensorLuz() {
-  // Sensor de LUZ
-  int sensorLuz = analogRead(3);                      // PIN 5
-  int valorLuz = map(sensorLuz,0,4095,0,100); 
-  return String(valorLuz);
-}
-
 void intercambioVariables() {
-  // Sensor de LUZ
-  pagina_web.replace("{17}", getSensorLuz());
   // Luces de POSICION
   if (bPosicion) {
     // Enciende las luces y muestra el enlace de APAGAR
@@ -426,12 +412,9 @@ String getPaginaWeb() {
   strPaginaWeb += String("<tr><td>SIRENA</a></td><td>{14}</td></tr>");
   strPaginaWeb += String("<tr><td>INTERMITENTE IZQUIERDO</a></td><td>{15}</td></tr>");
   strPaginaWeb += String("<tr><td>INTERMITENTE DERECHO</a></td><td>{16}</td></tr>");
-
-  strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");  
+  strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");
   strPaginaWeb += String("<tr><td>Sensor proximidad DELANTERO</td><td>{0}&percnt;</td></tr>");
   strPaginaWeb += String("<tr><td>Sensor proximidad TRASERO</td><td>{1}&percnt;</td></tr>");
-  strPaginaWeb += String("<tr><td>Sensor Luz</td><td>{17}</td></tr>");
-
   strPaginaWeb += String("<tr><td>Marcha atrás</td><td>{2}</td></tr>");
   strPaginaWeb += String("<tr><td>Freno-STOP</td><td>{3}</td></tr>");
   strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");
