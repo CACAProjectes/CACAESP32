@@ -102,7 +102,6 @@ void loop() {
   if (client) {                     // if you get a client,
     Serial.println("New Client.");  // print a message out the serial port
     String currentLine = "";        // make a String to hold incoming data from the client
-    pagina_web = getPaginaWeb();    // reinicia la página web con las variables {xx}
     while (client.connected()) {    // loop while the client's connected
       if (client.available()) {     // if there's bytes to read from the client,
         char c = client.read();     // read a byte, then
