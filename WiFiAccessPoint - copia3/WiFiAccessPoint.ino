@@ -15,21 +15,9 @@
 #include <NetworkClient.h>
 #include <WiFiAP.h>
 #include "esp_wifi.h"
-// Pantalla
-#include <Arduino.h>
-#include <U8g2lib.h>
-// GPIO
+
 #define LED_BUILTIN 4  // Set the GPIO pin where you connected your test LED or comment this line out if your dev board has a built-in LED
 #define SENSOR_LUZ  3
-// Pantalla
-#ifdef U8X8_HAVE_HW_SPI
-#include <SPI.h>
-#endif
-#ifdef U8X8_HAVE_HW_I2C
-#include <Wire.h>
-#endif
-#define SDA_PIN 5
-#define SCL_PIN 6
 
 // DATOS EN SERIE
 const int dataPin         = 8;   // SER
@@ -83,12 +71,6 @@ String currentLine        = "";
 int iPosWebPrincipal      = 0;
 // Network
 NetworkServer server(80);
-// Pantalla
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, 6, 5);
-int width = 72; 
-int height = 40; 
-int xOffset = 30; // = (132-w)/2 
-int yOffset = 12; // = (64-h)/2 
 
 void setup() {
   // PIN_MODE
@@ -115,9 +97,6 @@ void setup() {
   Serial.println("Server started");
   //  Configuración Html
   cabeceraHttp = getCabeceraHttp();
-  // Pantalla
-  Wire.begin(SDA_PIN, SCL_PIN);
-  u8g2.begin();
 }
 
 void loop() {
@@ -154,8 +133,6 @@ void loop() {
               gestionarActuadores();
               //  ENVIAR AL ESP32-SERIAL-595
               setRegister();   
-              // Mostrar en pantalla
-              mostrarPantalla();
               // break out of the while loop:
               break;
             }
@@ -173,26 +150,6 @@ void loop() {
     client.stop();
     Serial.println("Client Disconnected.");
   }
-}
-void mostrarPantalla() {
-  u8g2.clearBuffer();         // clear the internal memory
-  u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
-  //u8g2.drawStr(0,10,"Hello World!");  // write something to the internal memory
-  u8g2.drawFrame(xOffset, yOffset, 72, 40);
-  u8g2.setCursor(xOffset + 12, yOffset + 24);
-  //u8g2.printf("Hi CACA!");
-  if (bPosicion)
-    // Enciende las luces y muestra el enlace de APAGAR
-    u8g2.printf("LUZ POSI");
-  // Luces de CRUCE
-  if (bCruce)
-    // Enciende las luces y muestra el enlace de APAGAR
-    u8g2.printf("LUZ CRUC");
-  // Luces de CARRETERA
-  if (bCarretera) 
-    u8g2.printf("LUZ CARR");
-  //
-  u8g2.sendBuffer();          // transfer internal memory to the display
 }
 void setRegister() {
   // Bloquea el Serial 595, envía el byte1 y después el byte2 y desbloque el Serial 595
