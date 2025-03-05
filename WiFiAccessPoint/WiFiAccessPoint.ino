@@ -17,7 +17,7 @@
 #include "esp_wifi.h"
 
 #define LED_BUILTIN 4  // Set the GPIO pin where you connected your test LED or comment this line out if your dev board has a built-in LED
-#define SENSOR_LUZ  5
+#define SENSOR_LUZ  3
 
 // DATOS EN SERIE
 const int dataPin         = 8;   // SER
@@ -29,6 +29,8 @@ const char *password      = "12345678";
 // Set VAR PAGINA HTML
 String pagina_web;
 String cabeceraHttp;
+String paginaPrincipalGET = "GET /principal?";
+String paginaPrincipal    = "/principal?";
 // Botones ACTIVOS
 boolean bWarnings         = false;
 boolean bIntermitenteIzq  = false;
@@ -65,6 +67,8 @@ byte iRespuesta2          = 0b00000000;
 int CTE_MIN_BUCLE         = 1;
 int CTE_MAX_BUCLE         = 10;
 int mContador             = CTE_MIN_BUCLE;
+String currentLine        = "";
+int iPosWebPrincipal      = 0;
 // Network
 NetworkServer server(80);
 
@@ -92,7 +96,6 @@ void setup() {
   server.begin();
   Serial.println("Server started");
   //  Configuración Html
-  pagina_web = getPaginaWeb();
   cabeceraHttp = getCabeceraHttp();
 }
 
@@ -100,28 +103,39 @@ void loop() {
   NetworkClient client = server.accept();  // listen for incoming clients
   //
   if (client) {                     // if you get a client,
-    Serial.println("New Client.");  // print a message out the serial port
-    String currentLine = "";        // make a String to hold incoming data from the client
-    pagina_web = getPaginaWeb();    // reinicia la página web con las variables {xx}
+    Serial.println("New Client");  // print a message out the serial port
+    currentLine = "";        // make a String to hold incoming data from the client
     while (client.connected()) {    // loop while the client's connected
       if (client.available()) {     // if there's bytes to read from the client,
         char c = client.read();     // read a byte, then
-        Serial.write(c);            // print it out the serial monitor
         if (c == '\n') {            // if the byte is a newline character
           // if the current line is blank, you got two newline characters in a row.
           // that's the end of the client HTTP request, so send a response:
-          if (currentLine.length() == 0) {
-            // Lee y gestiona las peticiones de la URL
-            gestionarPeticiones(currentLine);
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
-            client.print(cabeceraHttp);
-            // Intercambio de variables
-            intercambioVariables();
-            // Página Web
-            client.print(pagina_web);
-            // The HTTP response ends with another blank line:
-            client.println();
+          if (currentLine.length() > 0) {
+            iPosWebPrincipal = currentLine.indexOf(paginaPrincipalGET); // Comprueba que sea la página web principal GET
+            if (iPosWebPrincipal >= 0) {
+              // Lee y gestiona las peticiones de la URL
+              gestionarPeticiones(currentLine);
+              // Inicializar pagina web cada vez para los {xx}
+              pagina_web = getPaginaWeb();
+              // Intercambio de variables
+              intercambioVariables();
+              /* CLIENT INI */
+              // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+              // and a content-type so the client knows what's coming, then a blank line:
+              client.print(cabeceraHttp);
+              // Página Web
+              client.print(pagina_web);
+              // The HTTP response ends with another blank line:
+              client.println();
+              /* CLIENT FIN */
+              // Activar/Desactivar actuadores
+              gestionarActuadores();
+              //  ENVIAR AL ESP32-SERIAL-595
+              setRegister();   
+              // break out of the while loop:
+              break;
+            }
             // break out of the while loop:
             break;
           } else {  // if you got a newline, then clear currentLine:
@@ -129,20 +143,7 @@ void loop() {
           }
         } else if (c != '\r') {  // if you got anything else but a carriage return character,
           currentLine += c;      // add it to the end of the currentLine
-        }
-        /*
-        // Check to see if the client request was "GET /H" or "GET /L":
-        if (currentLine.endsWith("GET /H")) {
-          digitalWrite(LED_BUILTIN, HIGH);  // GET /H turns the LED on
-        }
-        if (currentLine.endsWith("GET /L")) {
-          digitalWrite(LED_BUILTIN, LOW);  // GET /L turns the LED off
-        }
-        */
-        // Activar/Desactivar actuadores
-        gestionarActuadores();
-        //  ENVIAR AL ESP32-SERIAL-595
-        setRegister();        
+        }     
       }
     }
     // close the connection:
@@ -158,9 +159,6 @@ void setRegister() {
   digitalWrite(latchPin, HIGH);
 }
 void gestionarActuadores() {
-    //
-    int sensorLuz = analogRead(SENSOR_LUZ);               // PIN 5
-    int valorLuz = map(sensorLuz,0,4095,0,100);
     ////////////////
     // Intermitentes
     ////////////////
@@ -259,148 +257,150 @@ void gestionarPeticiones(String pCurrentLine) {
     // INTERMITENTE - DERECHO - S/N
     int iPos = pCurrentLine.indexOf("IND=");
     if (iPos >= 0) {
-      bIntermitenteDer = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bIntermitenteDer = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // INTERMITENTE - IZQUIERDO - S/N
     iPos = pCurrentLine.indexOf("INI=");
     if (iPos >= 0) {
-      bIntermitenteIzq = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bIntermitenteIzq = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // WARNINGS - S/N
     iPos = pCurrentLine.indexOf("WAR=");
     if (iPos >= 0) {
-      bWarnings = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bWarnings = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // SIRENA - S/N
     iPos = pCurrentLine.indexOf("SIR=");
     if (iPos >= 0) {
-      bSirena = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bSirena = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // LUCES DE POSICION - S/N
     iPos = pCurrentLine.indexOf("LPO=");
     if (iPos >= 0) {
-      bPosicion = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bPosicion = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // LUCES DE CRUCE - S/N
     iPos = pCurrentLine.indexOf("LCR=");
     if (iPos >= 0) {
-      bCruce = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bCruce = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // LUCES DE CARRETERA - S/N
     iPos = pCurrentLine.indexOf("LCA=");
     if (iPos >= 0) {
-      bCarretera = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bCarretera = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // UNIDAD DE POTENCIA - 00,10,20,...,90,99
     iPos = pCurrentLine.indexOf("UPO=");
     if (iPos >= 0) {
-      String vStr = pCurrentLine.substring(iPos+5, iPos+5+2);
+      String vStr = pCurrentLine.substring(iPos+4, iPos+4+2);
       iUnidadPotencia = vStr.toInt();
     }
     // GIRO RUEDAS - 10,20,...,80,90
     iPos = pCurrentLine.indexOf("GRU=");
     if (iPos >= 0) {
-      String vStr = pCurrentLine.substring(iPos+5, iPos+5+2);
+      String vStr = pCurrentLine.substring(iPos+4, iPos+4+2);
       iGiroRuedas = vStr.toInt();
     }
     // LUZ MARCHA ATRÁS - S/N
     iPos = pCurrentLine.indexOf("MAT=");
     if (iPos >= 0) {
-      bMarchaAtras = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bMarchaAtras = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // LUZ TRASERA FRENO/STOP - S/N
     iPos = pCurrentLine.indexOf("FRE=");
     if (iPos >= 0) {
-      bLuzTrasera = (pCurrentLine.substring(iPos+5, iPos+5+1) == "S");
+      bLuzTrasera = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
 
 }
 
 String getSensorLuz() {
   // Sensor de LUZ
-  int sensorLuz = analogRead(3);                      // PIN 5
+  int sensorLuz = analogRead(SENSOR_LUZ);                      // PIN 3
   int valorLuz = map(sensorLuz,0,4095,0,100); 
   return String(valorLuz);
 }
 
 void intercambioVariables() {
+  // Unidad de potencia
+  pagina_web.replace("{18}", String(iUnidadPotencia));
+  // Giro de ruedas
+  pagina_web.replace("{19}", String(iGiroRuedas));
   // Sensor de LUZ
   pagina_web.replace("{17}", getSensorLuz());
   // Luces de POSICION
   if (bPosicion) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{10}", "<a href=\"./LPO=N\">APAGAR</a>");
+    pagina_web.replace("{10}", "<a href=\"."+paginaPrincipal+"LPO=N\">APAGAR</a>");
   }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{10}", "<a href=\"./LPO=S\">ENCENDER</a>");
+    pagina_web.replace("{10}", "<a href=\"."+paginaPrincipal+"LPO=S\">ENCENDER</a>");
   }
   // Luces de CRUCE
   if (bCruce) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{11}", "<a href=\"./LCR=N\">APAGAR</a>");
+    pagina_web.replace("{11}", "<a href=\"."+paginaPrincipal+"LCR=N\">APAGAR</a>");
     }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{11}", "<a href=\"./LCR=S\">ENCENDER</a>");
+    pagina_web.replace("{11}", "<a href=\"."+paginaPrincipal+"LCR=S\">ENCENDER</a>");
   }
   // Luces de CARRETERA
   if (bCarretera) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{12}", "<a href=\"./LCA=N\">APAGAR</a>");
+    pagina_web.replace("{12}", "<a href=\"."+paginaPrincipal+"LCA=N\">APAGAR</a>");
     }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{12}", "<a href=\"./LCA=S\">ENCENDER</a>");
+    pagina_web.replace("{12}", "<a href=\"."+paginaPrincipal+"LCA=S\">ENCENDER</a>");
   }
   if (bWarnings) {
-    pagina_web.replace("{13}", "<a href=\"./WAR=N\">APAGAR</a>");
+    pagina_web.replace("{13}", "<a href=\"."+paginaPrincipal+"WAR=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{13}", "<a href=\"./WAR=S\">ENCENDER</a>");
+    pagina_web.replace("{13}", "<a href=\"."+paginaPrincipal+"WAR=S\">ENCENDER</a>");
   }
   if (bSirena) {
-    pagina_web.replace("{14}", "<a href=\"./SIR=N\">APAGAR</a>");
+    pagina_web.replace("{14}", "<a href=\"."+paginaPrincipal+"SIR=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{14}", "<a href=\"./SIR=S\">ENCENDER</a>");
+    pagina_web.replace("{14}", "<a href=\"."+paginaPrincipal+"SIR=S\">ENCENDER</a>");
   }  
   if (bIntermitenteIzq) {
-    pagina_web.replace("{15}", "<a href=\"./INI=N\">APAGAR</a>");
+    pagina_web.replace("{15}", "<a href=\"."+paginaPrincipal+"INI=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{15}", "<a href=\"./INI=S\">ENCENDER</a>");
+    pagina_web.replace("{15}", "<a href=\"."+paginaPrincipal+"INI=S\">ENCENDER</a>");
   }  
   if (bIntermitenteDer) {
-    pagina_web.replace("{16}", "<a href=\"./DER=N\">APAGAR</a>");
+    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"DER=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{16}", "<a href=\"./DER=S\">ENCENDER</a>");
+    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"DER=S\">ENCENDER</a>");
   }  
   // Sensor proximidad DELANTERO
-  pagina_web.replace("{0}", "11,3");        // Sensor proximidad DELANTERO
+  pagina_web.replace("{0}", "0");        // Sensor proximidad DELANTERO
   // Sensor proximidad TRASERO
-  pagina_web.replace("{1}", "8,5");         // Sensor proximidad TRASERO
+  pagina_web.replace("{1}", "0");         // Sensor proximidad TRASERO
   // Marcha atrás
   if (bMarchaAtras) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{2}", "<a href=\"./MAT=N\">QUITAR</a>");
+    pagina_web.replace("{2}", "<a href=\"."+paginaPrincipal+"MAT=N\">QUITAR</a>");
   }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{2}", "<a href=\"./MAT=S\">PONER</a>");
+    pagina_web.replace("{2}", "<a href=\"."+paginaPrincipal+"MAT=S\">PONER</a>");
   }
   // Freno-STOP
   if (bLuzTrasera) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{3}", "<a href=\"./FRE=N\">SOLTAR</a>");
+    pagina_web.replace("{3}", "<a href=\"."+paginaPrincipal+"FRE=N\">SOLTAR</a>");
   }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{3}", "<a href=\"./FRE=S\">FRENAR</a>");
+    pagina_web.replace("{3}", "<a href=\"."+paginaPrincipal+"FRE=S\">FRENAR</a>");
   }
-  // Unidad de potencia
-  pagina_web.replace("{4}", "86");          // Unidad de potencia
 }
 String getCabeceraHttp() {
   String strCabHttp = String("HTTP/1.1 200 OK\n");
@@ -414,15 +414,16 @@ String getPaginaWeb() {
   strPaginaWeb += String("<head>");
   strPaginaWeb += String("<title>CACA_ESP32_C3 - C a r</title>");
   strPaginaWeb += String("<meta charset=\"UTF-8\">");
-  strPaginaWeb += String("<meta http-equiv=\"refresh\" content=\"100; url=./K\">");
+//  strPaginaWeb += String("<meta http-equiv=\"refresh\" content=\"100; url=./vacio\">");
   strPaginaWeb += String("</head>");
   strPaginaWeb += String("<html>");
   strPaginaWeb += String("<body>");
   //
   strPaginaWeb += String("<table border=0>");
+  strPaginaWeb += String("<tr><td colspan=\"2\" align=\"center\">C A R</td></tr>");
   strPaginaWeb += String("<tr><td>LUCES POSICI&Oacute;N</a></td><td>{10}</td></tr>");
   strPaginaWeb += String("<tr><td>LUCES CRUCE</a></td><td>{11}</td></tr>");
-  strPaginaWeb += String("<tr><td>LUCES CARRETERA</a></td>{12}<td></td></tr>");
+  strPaginaWeb += String("<tr><td>LUCES CARRETERA</a></td><td>{12}</td></tr>");
   strPaginaWeb += String("<tr><td>WARNINGS</a></td><td>{13}</td></tr>");
   strPaginaWeb += String("<tr><td>SIRENA</a></td><td>{14}</td></tr>");
   strPaginaWeb += String("<tr><td>INTERMITENTE IZQUIERDO</a></td><td>{15}</td></tr>");
@@ -436,35 +437,35 @@ String getPaginaWeb() {
   strPaginaWeb += String("<tr><td>Marcha atrás</td><td>{2}</td></tr>");
   strPaginaWeb += String("<tr><td>Freno-STOP</td><td>{3}</td></tr>");
   strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");
-  strPaginaWeb += String("<tr><td>Unidad de potencia</td><td>{4}&percnt;</td></tr>");
+  strPaginaWeb += String("<tr><td>Unidad de potencia</td><td>{18}&percnt;</td></tr>");
   strPaginaWeb += String("<tr>");
 	strPaginaWeb += String("<td  colspan=2 align=\"center\">");
-	strPaginaWeb += String("&lsqb;<a href=\"./UPO=00\">PARAR</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=10\">10&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=20\">20&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=30\">30&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=40\">40&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=50\">50&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=60\">60&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=70\">70&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=80\">80&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=90\">90&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./UPO=99\">MAX VELOCIDAD</a>&rsqb;");
+	strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=00\">PARAR</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=10\">10&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=20\">20&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=30\">30&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=40\">40&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=50\">50&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=60\">60&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=70\">70&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=80\">80&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=90\">90&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=99\">MAX VELOCIDAD</a>&rsqb;");
   strPaginaWeb += String("</td>");
   strPaginaWeb += String("</tr>");
   strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");
-  strPaginaWeb += String("<tr><td>Giro ruedas delanteras</td><td>45&deg;</td></tr>");
+  strPaginaWeb += String("<tr><td>Giro ruedas delanteras</td><td>{19}&deg;</td></tr>");
   strPaginaWeb += String("<tr>");
 	strPaginaWeb += String("<td  colspan=2 align=\"center\">");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=10\">-40&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=20\">-30&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=30\">-20&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=40\">-10&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=50\">RECTO</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=60\">+10&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=70\">+20&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=80\">+30&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"./GRU=90\">+40&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=10\">-40&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=20\">-30&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=30\">-20&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=40\">-10&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=50\">RECTO</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=60\">+10&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=70\">+20&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=80\">+30&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=90\">+40&deg;</a>&rsqb;");
   strPaginaWeb += String("</td>");
   strPaginaWeb += String("</tr>");
   strPaginaWeb += String("</table>");
