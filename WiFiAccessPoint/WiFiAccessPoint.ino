@@ -90,6 +90,86 @@ int height = 40;
 int xOffset = 30; // = (132-w)/2 
 int yOffset = 12; // = (64-h)/2 
 
+const uint8_t epd_bitmap_luz_posicion[] = 
+{   
+  0b01000000,0b00100000, 
+  0b10000000,0b00010110, 
+  0b00010000,0b10001111, 
+  0b10100000,0b01011001, 
+  0b11000000,0b00110000, 
+  0b01100000,0b01100000, 
+  0b01100000,0b01100000, 
+  0b11000000,0b00110000, 
+  0b10100000,0b01011001, 
+  0b00010000,0b10001111, 
+  0b10000000,0b00010110, 
+  0b01000000,0b00100000
+};
+
+const uint8_t epd_bitmap_luz_cruce[] = 
+{   
+  0b00000000,0b00001100,
+  0b00000000,0b00011110,
+  0b00000000,0b00111101,
+  0b10000000,0b01111100,
+  0b01000000,0b01101110,
+  0b00000000,0b11101101,
+  0b10000000,0b11101100,
+  0b01000000,0b01101110,
+  0b00000000,0b01111101,
+  0b10000000,0b00111100,
+  0b01000000,0b00011110,
+  0b00000000,0b00001101
+};
+
+const uint8_t epd_bitmap_luz_carretera[] = 
+{   
+  0b00000000,0b00001100,
+  0b11000000,0b00011111,
+  0b00000000,0b00111100,
+  0b00000000,0b01111100,
+  0b11000000,0b01101111,
+  0b00000000,0b11001100,
+  0b00000000,0b11001100,
+  0b11000000,0b01101111,
+  0b00000000,0b01111100,
+  0b00000000,0b00111100,
+  0b11000000,0b00011111,
+  0b00000000,0b00001100
+};
+
+const uint8_t epd_bitmap_int_der[] = 
+{
+  0b00000100,
+  0b00001100,
+  0b00011100,
+  0b00111000,
+  0b01110000,
+  0b11111110,
+  0b11111110,
+  0b01110000,
+  0b00111000,
+  0b00011100,
+  0b00001100,
+  0b00000100
+};
+
+const uint8_t epd_bitmap_int_izq[] = 
+{
+  0b00100000,
+  0b00110000,
+  0b00111000,
+  0b00011100,
+  0b00001110,
+  0b01111111,
+  0b01111111,
+  0b00001110,
+  0b00011100,
+  0b00111000,
+  0b00110000,
+  0b00100000
+};
+
 void setup() {
   // PIN_MODE
   pinMode(LED_BUILTIN, OUTPUT); // Led interno ESP32C3  
@@ -176,22 +256,26 @@ void loop() {
 }
 void mostrarPantalla() {
   u8g2.clearBuffer();         // clear the internal memory
-  u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
+  //u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
   //u8g2.drawStr(0,10,"Hello World!");  // write something to the internal memory
   u8g2.drawFrame(xOffset, yOffset, 72, 40);
-  u8g2.setCursor(xOffset + 12, yOffset + 24);
-  //u8g2.printf("Hi CACA!");
+  // Intermitente izquierdo
+  if (bIntermitenteIzq)
+    u8g2.drawXBMP(xOffset + 3, yOffset + 4, 8, 12, epd_bitmap_int_izq);
+  // Luces de POSICION
   if (bPosicion)
-    // Enciende las luces y muestra el enlace de APAGAR
-    u8g2.printf("LUZ POSI");
+    u8g2.drawXBMP(xOffset + 10, yOffset + 4, 16, 12, epd_bitmap_luz_posicion);
   // Luces de CRUCE
   if (bCruce)
-    // Enciende las luces y muestra el enlace de APAGAR
-    u8g2.printf("LUZ CRUC");
+    u8g2.drawXBMP(xOffset + 26, yOffset + 4, 16, 12, epd_bitmap_luz_cruce);
   // Luces de CARRETERA
-  if (bCarretera) 
-    u8g2.printf("LUZ CARR");
-  //
+  if (bCarretera)
+    u8g2.drawXBMP(xOffset + 42, yOffset + 4, 16, 12, epd_bitmap_luz_carretera);
+  // Intermitente derecho
+  if (bIntermitenteDer)
+    u8g2.drawXBMP(xOffset + 61, yOffset + 4, 8, 12, epd_bitmap_int_der);
+
+  //u8g2.drawBitmap(u8g2_uint_t x, u8g2_uint_t y, u8g2_uint_t cnt, u8g2_uint_t h, const uint8_t *bitmap)
   u8g2.sendBuffer();          // transfer internal memory to the display
 }
 void setRegister() {
@@ -417,10 +501,10 @@ void intercambioVariables() {
     pagina_web.replace("{15}", "<a href=\"."+paginaPrincipal+"INI=S\">ENCENDER</a>");
   }  
   if (bIntermitenteDer) {
-    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"DER=N\">APAGAR</a>");
+    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"IND=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"DER=S\">ENCENDER</a>");
+    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"IND=S\">ENCENDER</a>");
   }  
   // Sensor proximidad DELANTERO
   pagina_web.replace("{0}", "0");        // Sensor proximidad DELANTERO
