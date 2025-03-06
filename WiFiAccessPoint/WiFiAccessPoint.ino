@@ -150,13 +150,6 @@ void loop() {
               // The HTTP response ends with another blank line:
               client.println();
               /* CLIENT FIN */
-              // Activar/Desactivar actuadores
-              gestionarActuadores();
-              //  ENVIAR AL ESP32-SERIAL-595
-              setRegister();   
-              // Mostrar en pantalla
-              mostrarPantalla();
-              // break out of the while loop:
               break;
             }
             // break out of the while loop:
@@ -173,6 +166,13 @@ void loop() {
     client.stop();
     Serial.println("Client Disconnected.");
   }
+  // Activar/Desactivar actuadores
+  gestionarActuadores();
+  //  ENVIAR AL ESP32-SERIAL-595
+  setRegister();   
+  // Mostrar en pantalla
+  mostrarPantalla();
+  // break out of the while loop:  
 }
 void mostrarPantalla() {
   u8g2.clearBuffer();         // clear the internal memory
