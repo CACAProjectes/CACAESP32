@@ -221,7 +221,8 @@ void loop() {
               pagina_web = getPaginaWeb();
               // Intercambio de variables
               intercambioVariables();
-              /* CLIENT INI */
+              
+			  /* CLIENT INI */
               // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
               // and a content-type so the client knows what's coming, then a blank line:
               client.print(cabeceraHttp);
@@ -230,6 +231,12 @@ void loop() {
               // The HTTP response ends with another blank line:
               client.println();
               /* CLIENT FIN */
+			  
+			  // Activar/Desactivar actuadores fijos, luces, etc.
+			  gestionarActuadores();
+			  // Mostrar en pantalla
+			  mostrarPantalla();
+			  // break out of the while loop:  
               break;
             }
             // break out of the while loop:
@@ -246,14 +253,12 @@ void loop() {
     client.stop();
     Serial.println("Client Disconnected.");
   }
-  // Activar/Desactivar actuadores
-  gestionarActuadores();
+  //  Actuadores secuenciales, intermitentes, sirena
+  gestionarActuadoresSecuenciales();
   //  ENVIAR AL ESP32-SERIAL-595
   setRegister();   
-  // Mostrar en pantalla
-  mostrarPantalla();
-  // break out of the while loop:  
 }
+
 void mostrarPantalla() {
   u8g2.clearBuffer();         // clear the internal memory
   //u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
@@ -285,7 +290,7 @@ void setRegister() {
   shiftOut(dataPin, clockPin, LSBFIRST, iRespuesta2); 
   digitalWrite(latchPin, HIGH);
 }
-void gestionarActuadores() {
+void gestionarActuadoresSecuenciales() {
     ////////////////
     // Intermitentes
     ////////////////
@@ -329,7 +334,10 @@ void gestionarActuadores() {
       // Sirena OFF
       iRespuesta2 = iRespuesta2 & ~CTE_SirenaBON;	
       iRespuesta2 = iRespuesta2 & ~CTE_SirenaRON;				
-    }
+    }	
+}
+
+void gestionarActuadores() {
     ////////////////
     // Luces
     ////////////////
