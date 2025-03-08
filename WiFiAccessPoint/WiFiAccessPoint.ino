@@ -291,19 +291,35 @@ void setRegister() {
   digitalWrite(latchPin, HIGH);
 }
 void gestionarActuadoresSecuenciales() {
+  delay(1000);  // delay
+  Serial.print("bIntermitenteIzq: ");
+  Serial.print(String(bIntermitenteIzq));
+  Serial.print(" - bIntermitenteDer: ");
+  Serial.print(String(bIntermitenteDer));
+  Serial.print(String(" - mContador: "));
+  Serial.println(String(mContador));
     ////////////////
     // Intermitentes
     ////////////////
-    if (bIntermitenteIzq && mContador <= CTE_MAX_BUCLE/2) 
+    if (bIntermitenteIzq && mContador <= CTE_MAX_BUCLE/2) {
       // Intermitente Izq ON
       iRespuesta2 = iRespuesta2 | CTE_IntermIzqON;	      // ON
-    if (bIntermitenteIzq && mContador > CTE_MAX_BUCLE/2) 
+    }
+    if (bIntermitenteIzq && mContador > CTE_MAX_BUCLE/2)  {
       // Intermitente Izq OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
+    }
+    if (!bIntermitenteIzq)  {
+      // Intermitente Izq OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
+    }
     if (bIntermitenteDer && mContador <= CTE_MAX_BUCLE/2) 
       // Intermitente Der ON
       iRespuesta2 = iRespuesta2 | CTE_IntermDerON;        // ON
     if (bIntermitenteDer && mContador > CTE_MAX_BUCLE/2) 
+      // Intermitente Der OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
+    if (!bIntermitenteDer) 
       // Intermitente Der OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
     ////////////////
@@ -335,6 +351,11 @@ void gestionarActuadoresSecuenciales() {
       iRespuesta2 = iRespuesta2 & ~CTE_SirenaBON;	
       iRespuesta2 = iRespuesta2 & ~CTE_SirenaRON;				
     }	
+    ////////////////
+    //  CONTADOR
+    ////////////////
+    if (mContador++ > CTE_MAX_BUCLE-1)
+      mContador = CTE_MIN_BUCLE;
 }
 
 void gestionarActuadores() {
@@ -381,12 +402,6 @@ void gestionarActuadores() {
       iRespuesta1 = iRespuesta1 | CTE_LuzTrasON;          // ON
       else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzTrasON;	        // OFF
-    ////////////////
-    //  CONTADOR
-    ////////////////
-    if (mContador++ > CTE_MAX_BUCLE)
-      mContador = CTE_MIN_BUCLE;
-
 }
 void gestionarPeticiones(String pCurrentLine) {
     // INTERMITENTE - DERECHO - S/N
@@ -452,8 +467,10 @@ void gestionarPeticiones(String pCurrentLine) {
 String getSensorLuz() {
   // Sensor de LUZ
   int sensorLuz = analogRead(SENSOR_LUZ);                      // PIN 3
-  int valorLuz = map(sensorLuz,0,4095,0,100); 
-  return String(valorLuz);
+  int valorLuz = map(sensorLuz,0,4095,0,1000); 
+  int iNum = valorLuz / 10;
+  int iDec = valorLuz % 10;  
+  return String(iNum) + "." + String(iDec);
 }
 
 void intercambioVariables() {
@@ -567,7 +584,7 @@ String getPaginaWeb() {
   strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");  
   strPaginaWeb += String("<tr><td>Sensor proximidad DELANTERO</td><td>{0}&percnt;</td></tr>");
   strPaginaWeb += String("<tr><td>Sensor proximidad TRASERO</td><td>{1}&percnt;</td></tr>");
-  strPaginaWeb += String("<tr><td>Sensor Luz</td><td>{17}</td></tr>");
+  strPaginaWeb += String("<tr><td>Sensor Luz</td><td>{17}&percnt;</td></tr>");
 
   strPaginaWeb += String("<tr><td>Marcha atrás</td><td>{2}</td></tr>");
   strPaginaWeb += String("<tr><td>Freno-STOP</td><td>{3}</td></tr>");
