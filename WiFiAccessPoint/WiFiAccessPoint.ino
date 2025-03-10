@@ -221,7 +221,8 @@ void loop() {
               pagina_web = getPaginaWeb();
               // Intercambio de variables
               intercambioVariables();
-              /* CLIENT INI */
+              
+			  /* CLIENT INI */
               // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
               // and a content-type so the client knows what's coming, then a blank line:
               client.print(cabeceraHttp);
@@ -230,6 +231,12 @@ void loop() {
               // The HTTP response ends with another blank line:
               client.println();
               /* CLIENT FIN */
+			  
+			  // Activar/Desactivar actuadores fijos, luces, etc.
+			  gestionarActuadores();
+			  // Mostrar en pantalla
+			  mostrarPantalla();
+			  // break out of the while loop:  
               break;
             }
             // break out of the while loop:
@@ -246,14 +253,12 @@ void loop() {
     client.stop();
     Serial.println("Client Disconnected.");
   }
-  // Activar/Desactivar actuadores
-  gestionarActuadores();
+  //  Actuadores secuenciales, intermitentes, sirena
+  gestionarActuadoresSecuenciales();
   //  ENVIAR AL ESP32-SERIAL-595
   setRegister();   
-  // Mostrar en pantalla
-  mostrarPantalla();
-  // break out of the while loop:  
 }
+
 void mostrarPantalla() {
   u8g2.clearBuffer();         // clear the internal memory
   //u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
@@ -285,20 +290,36 @@ void setRegister() {
   shiftOut(dataPin, clockPin, LSBFIRST, iRespuesta2); 
   digitalWrite(latchPin, HIGH);
 }
-void gestionarActuadores() {
+void gestionarActuadoresSecuenciales() {
+  delay(1000);  // delay
+  Serial.print("bIntermitenteIzq: ");
+  Serial.print(String(bIntermitenteIzq));
+  Serial.print(" - bIntermitenteDer: ");
+  Serial.print(String(bIntermitenteDer));
+  Serial.print(String(" - mContador: "));
+  Serial.println(String(mContador));
     ////////////////
     // Intermitentes
     ////////////////
-    if (bIntermitenteIzq && mContador <= CTE_MAX_BUCLE/2) 
+    if (bIntermitenteIzq && mContador <= CTE_MAX_BUCLE/2) {
       // Intermitente Izq ON
       iRespuesta2 = iRespuesta2 | CTE_IntermIzqON;	      // ON
-    if (bIntermitenteIzq && mContador > CTE_MAX_BUCLE/2) 
+    }
+    if (bIntermitenteIzq && mContador > CTE_MAX_BUCLE/2)  {
       // Intermitente Izq OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
+    }
+    if (!bIntermitenteIzq)  {
+      // Intermitente Izq OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
+    }
     if (bIntermitenteDer && mContador <= CTE_MAX_BUCLE/2) 
       // Intermitente Der ON
       iRespuesta2 = iRespuesta2 | CTE_IntermDerON;        // ON
     if (bIntermitenteDer && mContador > CTE_MAX_BUCLE/2) 
+      // Intermitente Der OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
+    if (!bIntermitenteDer) 
       // Intermitente Der OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
     ////////////////
@@ -329,7 +350,15 @@ void gestionarActuadores() {
       // Sirena OFF
       iRespuesta2 = iRespuesta2 & ~CTE_SirenaBON;	
       iRespuesta2 = iRespuesta2 & ~CTE_SirenaRON;				
-    }
+    }	
+    ////////////////
+    //  CONTADOR
+    ////////////////
+    if (mContador++ > CTE_MAX_BUCLE-1)
+      mContador = CTE_MIN_BUCLE;
+}
+
+void gestionarActuadores() {
     ////////////////
     // Luces
     ////////////////
@@ -373,12 +402,6 @@ void gestionarActuadores() {
       iRespuesta1 = iRespuesta1 | CTE_LuzTrasON;          // ON
       else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzTrasON;	        // OFF
-    ////////////////
-    //  CONTADOR
-    ////////////////
-    if (mContador++ > CTE_MAX_BUCLE)
-      mContador = CTE_MIN_BUCLE;
-
 }
 void gestionarPeticiones(String pCurrentLine) {
     // INTERMITENTE - DERECHO - S/N
@@ -444,8 +467,10 @@ void gestionarPeticiones(String pCurrentLine) {
 String getSensorLuz() {
   // Sensor de LUZ
   int sensorLuz = analogRead(SENSOR_LUZ);                      // PIN 3
-  int valorLuz = map(sensorLuz,0,4095,0,100); 
-  return String(valorLuz);
+  int valorLuz = map(sensorLuz,0,4095,0,1000); 
+  int iNum = valorLuz / 10;
+  int iDec = valorLuz % 10;  
+  return String(iNum) + "." + String(iDec);
 }
 
 void intercambioVariables() {
@@ -559,7 +584,7 @@ String getPaginaWeb() {
   strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");  
   strPaginaWeb += String("<tr><td>Sensor proximidad DELANTERO</td><td>{0}&percnt;</td></tr>");
   strPaginaWeb += String("<tr><td>Sensor proximidad TRASERO</td><td>{1}&percnt;</td></tr>");
-  strPaginaWeb += String("<tr><td>Sensor Luz</td><td>{17}</td></tr>");
+  strPaginaWeb += String("<tr><td>Sensor Luz</td><td>{17}&percnt;</td></tr>");
 
   strPaginaWeb += String("<tr><td>Marcha atrás</td><td>{2}</td></tr>");
   strPaginaWeb += String("<tr><td>Freno-STOP</td><td>{3}</td></tr>");
