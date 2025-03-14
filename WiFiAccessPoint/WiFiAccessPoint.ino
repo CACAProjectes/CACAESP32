@@ -53,8 +53,8 @@ boolean bCruce            = false;
 boolean bCarretera        = false;
 boolean bMarchaAtras      = false;
 boolean bLuzTrasera       = false;
-boolean bIntermDerNew     = false;
-boolean bIntermIzqNew     = false;
+boolean bLuzTraseraAtras  = false;
+boolean bLuzTraseraStop   = false;
 //
 int iUnidadPotencia       = 0;
 int iGiroRuedas           = 0;
@@ -72,7 +72,7 @@ byte CTE_LuzPosON  	      = 0b00010000;	// U2 - QD
 byte CTE_LuzGirIzqON  	  = 0b00001000;	// U2 - QE
 byte CTE_LuzTrasON  	    = 0b00000100;	// U2 - QF
 byte CTE_LuzAtrON  	      = 0b00000010;	// U2 - QG
-byte CTE_LuzMatrON  	    = 0b00000001;	// U2 - QH
+byte CTE_LuzStopON  	    = 0b00000001;	// U2 - QH
 
 // String de salida
 byte iRespuesta1          = 0b00000000;
@@ -276,8 +276,7 @@ void mostrarPantalla() {
   //u8g2.drawStr(0,10,"Hello World!");  // write something to the internal memory
   u8g2.drawFrame(xOffset, yOffset, 72, 40);
   // Intermitente izquierdo
-  //if (bIntermitenteIzq)
-  if (bIntermIzqNew)  
+  if (bIntermitenteIzq)
     u8g2.drawXBMP(xOffset + 3, yOffset + 4, 8, 12, epd_bitmap_int_izq);
   // Luces de POSICION
   if (bPosicion)
@@ -289,11 +288,9 @@ void mostrarPantalla() {
   if (bCarretera)
     u8g2.drawXBMP(xOffset + 42, yOffset + 4, 16, 12, epd_bitmap_luz_carretera);
   // Intermitente derecho
-  //if (bIntermitenteDer)
-  if (bIntermDerNew)  
+  if (bIntermitenteDer)
     u8g2.drawXBMP(xOffset + 61, yOffset + 4, 8, 12, epd_bitmap_int_der);
 
-  //u8g2.drawBitmap(u8g2_uint_t x, u8g2_uint_t y, u8g2_uint_t cnt, u8g2_uint_t h, const uint8_t *bitmap)
   u8g2.sendBuffer();          // transfer internal memory to the display
 }
 void setRegister() {
@@ -304,15 +301,18 @@ void setRegister() {
   digitalWrite(latchPin, HIGH);
 }
 void gestionarActuadoresSecuenciales() {
+    if (bWarnings) {
+      bIntermitenteDer = false;                           // DER -> FALSE
+      bIntermitenteIzq = false;                           // IZQ -> FALSE
+    }
     ////////////////
     // Intermitentes
     ////////////////
-    if ((bWarnings || bIntermitenteIzq || bIntermIzqNew) && mContador <= CTE_MAX_BUCLE/2) {
+    if ((bWarnings || bIntermitenteIzq) && mContador <= CTE_MAX_BUCLE/2) {
       // Intermitente Izq ON
       iRespuesta2 = iRespuesta2 | CTE_IntermIzqON;	      // ON
-      bIntermitenteDer = false;                           // DER -> FALSE
     }
-    if ((bWarnings || bIntermitenteIzq || bIntermIzqNew) && mContador > CTE_MAX_BUCLE/2)  {
+    if ((bWarnings || bIntermitenteIzq) && mContador > CTE_MAX_BUCLE/2)  {
       // Intermitente Izq OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
     }
@@ -320,20 +320,17 @@ void gestionarActuadoresSecuenciales() {
       // Intermitente Izq OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
     }
-    bIntermIzqNew = false;
     //
-    if ((bWarnings || bIntermitenteDer || bIntermDerNew) && mContador <= CTE_MAX_BUCLE/2) {
+    if ((bWarnings || bIntermitenteDer) && mContador <= CTE_MAX_BUCLE/2) {
       // Intermitente Der ON
       iRespuesta2 = iRespuesta2 | CTE_IntermDerON;        // ON
-      bIntermitenteIzq = false;                           // IZQ -> FALSE
     }
-    if ((bWarnings || bIntermitenteDer || bIntermDerNew) && mContador > CTE_MAX_BUCLE/2) 
+    if ((bWarnings || bIntermitenteDer) && mContador > CTE_MAX_BUCLE/2) 
       // Intermitente Der OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
     if (!bWarnings && !bIntermitenteDer) 
       // Intermitente Der OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
-    bIntermDerNew = false;
     ////////////////
     // Sirena
     ////////////////
@@ -376,24 +373,19 @@ void gestionarActuadores() {
     ////////////////
     if (bCarretera) 
       // Luces de carretera ON
-      iRespuesta1 = iRespuesta1 | CTE_LuzCarrON;	        // ON
+      iRespuesta1 = iRespuesta1 | CTE_LuzCarrON | CTE_LuzTrasON;	        // ON
       else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzCarrON;	        // OFF
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzCarrON & ~CTE_LuzTrasON;	        // OFF
     if (bCruce) 
       // Luces de cruce ON
-      iRespuesta1 = iRespuesta1 | CTE_LuzCrucON;	        // ON
+      iRespuesta1 = iRespuesta1 | CTE_LuzCrucON | CTE_LuzTrasON;	        // ON
       else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzCrucON;	        // OFF
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzCrucON & ~CTE_LuzTrasON;	        // OFF
     if (bPosicion) 
       // Luces de posición ON
-      iRespuesta1 = iRespuesta1 | CTE_LuzPosON;		        // ON
+      iRespuesta1 = iRespuesta1 | CTE_LuzPosON | CTE_LuzTrasON;		        // ON
       else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzPosON;	        // OFF
-    if (bCarretera || bCruce || bPosicion)
-      // Luz de la matrícula
-      iRespuesta1 = iRespuesta1 | CTE_LuzMatrON;		      // ON
-    else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzMatrON;	        // OFF
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzPosON & ~CTE_LuzTrasON;	        // OFF
     if (iGiroRuedas < 40)
       // Luz Giro Iquierdo
       iRespuesta1 = iRespuesta1 | CTE_LuzGirIzqON;	      // ON
@@ -404,29 +396,29 @@ void gestionarActuadores() {
       iRespuesta1 = iRespuesta1 | CTE_LuzGirDerON;	      // ON
     else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzGirDerON;	      // OFF
-    if (bMarchaAtras) 
+    if (bLuzTraseraAtras) 
       // Luces de marcha atrás
       iRespuesta1 = iRespuesta1 | CTE_LuzAtrON;		        // ON
       else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzAtrON;	        // OFF
-    if (bLuzTrasera) 
+    if (bLuzTraseraStop) 
       // Luz trasera Freno/STOP
-      iRespuesta1 = iRespuesta1 | CTE_LuzTrasON;          // ON
+      iRespuesta1 = iRespuesta1 | CTE_LuzStopON;          // ON
       else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzTrasON;	        // OFF
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzStopON;	        // OFF
 }
 void gestionarPeticiones(String pCurrentLine) {
     // INTERMITENTE - DERECHO - S/N
     int iPos = pCurrentLine.indexOf("IND=");
     if (iPos >= 0) {
       bIntermitenteDer = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
-      bIntermDerNew = true;
+      bIntermitenteIzq = false;
     }
     // INTERMITENTE - IZQUIERDO - S/N
     iPos = pCurrentLine.indexOf("INI=");
     if (iPos >= 0) {
       bIntermitenteIzq = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
-      bIntermIzqNew = true;
+      bIntermitenteDer = false;
     }
     // WARNINGS - S/N
     iPos = pCurrentLine.indexOf("WAR=");
@@ -468,12 +460,12 @@ void gestionarPeticiones(String pCurrentLine) {
     // LUZ MARCHA ATRÁS - S/N
     iPos = pCurrentLine.indexOf("MAT=");
     if (iPos >= 0) {
-      bMarchaAtras = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
+      bLuzTraseraAtras = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // LUZ TRASERA FRENO/STOP - S/N
     iPos = pCurrentLine.indexOf("FRE=");
     if (iPos >= 0) {
-      bLuzTrasera = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
+      bLuzTraseraStop = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
 
 }
@@ -550,7 +542,7 @@ void intercambioVariables() {
   // Sensor proximidad TRASERO
   pagina_web.replace("{1}", "0");         // Sensor proximidad TRASERO
   // Marcha atrás
-  if (bMarchaAtras) {
+  if (bLuzTraseraAtras) {
     // Enciende las luces y muestra el enlace de APAGAR
     pagina_web.replace("{2}", "<a href=\"."+paginaPrincipal+"?MAT=N\">QUITAR</a>");
   }
@@ -559,7 +551,7 @@ void intercambioVariables() {
     pagina_web.replace("{2}", "<a href=\"."+paginaPrincipal+"?MAT=S\">PONER</a>");
   }
   // Freno-STOP
-  if (bLuzTrasera) {
+  if (bLuzTraseraStop) {
     // Enciende las luces y muestra el enlace de APAGAR
     pagina_web.replace("{3}", "<a href=\"."+paginaPrincipal+"?FRE=N\">SOLTAR</a>");
   }
