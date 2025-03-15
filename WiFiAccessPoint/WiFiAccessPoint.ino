@@ -55,6 +55,8 @@ boolean bMarchaAtras      = false;
 boolean bLuzTrasera       = false;
 boolean bLuzTraseraAtras  = false;
 boolean bLuzTraseraStop   = false;
+boolean bIntermitenteIzqON= false;
+boolean bIntermitenteDerON= false;
 //
 int iUnidadPotencia       = 0;
 int iGiroRuedas           = 0;
@@ -206,6 +208,9 @@ void setup() {
   // Pantalla
   Wire.begin(SDA_PIN, SCL_PIN);
   u8g2.begin();
+  u8g2.setContrast(255); // maximum contrast 
+  u8g2.setBusClock(400000);   // 400kHz I2C 
+  u8g2.setFont(u8g2_font_ncenB10_tr); 
 }
 
 void loop() {
@@ -266,17 +271,20 @@ void loop() {
   }
   //  Actuadores secuenciales, intermitentes, sirena
   gestionarActuadoresSecuenciales();
+  //  Mostrar intermitentes en Pantalla
+  if (bWarnings || bIntermitenteIzq || bIntermitenteDer) {
+    mostrarPantalla();
+  }
   //  ENVIAR AL ESP32-SERIAL-595
   setRegister();   
 }
 
 void mostrarPantalla() {
-  u8g2.clearBuffer();         // clear the internal memory
-  //u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
-  //u8g2.drawStr(0,10,"Hello World!");  // write something to the internal memory
+  u8g2.clearBuffer();                     // clear the internal memory
+    
   u8g2.drawFrame(xOffset, yOffset, 72, 40);
   // Intermitente izquierdo
-  if (bIntermitenteIzq)
+  if ((bWarnings || bIntermitenteIzq) && bIntermitenteIzqON)
     u8g2.drawXBMP(xOffset + 3, yOffset + 4, 8, 12, epd_bitmap_int_izq);
   // Luces de POSICION
   if (bPosicion)
@@ -288,10 +296,13 @@ void mostrarPantalla() {
   if (bCarretera)
     u8g2.drawXBMP(xOffset + 42, yOffset + 4, 16, 12, epd_bitmap_luz_carretera);
   // Intermitente derecho
-  if (bIntermitenteDer)
+  if ((bWarnings || bIntermitenteDer) && bIntermitenteDerON)
     u8g2.drawXBMP(xOffset + 61, yOffset + 4, 8, 12, epd_bitmap_int_der);
+  //  Velocidad Unidad de Potencia
+  u8g2.setCursor(xOffset + 25, yOffset + 35); 
+  u8g2.printf("%0d", iUnidadPotencia);                // write something to the internal memory
 
-  u8g2.sendBuffer();          // transfer internal memory to the display
+  u8g2.sendBuffer();                      // transfer internal memory to the display
 }
 void setRegister() {
   // Bloquea el Serial 595, envía el byte1 y después el byte2 y desbloque el Serial 595
@@ -301,6 +312,7 @@ void setRegister() {
   digitalWrite(latchPin, HIGH);
 }
 void gestionarActuadoresSecuenciales() {
+    // Warnings
     if (bWarnings) {
       bIntermitenteDer = false;                           // DER -> FALSE
       bIntermitenteIzq = false;                           // IZQ -> FALSE
@@ -311,26 +323,34 @@ void gestionarActuadoresSecuenciales() {
     if ((bWarnings || bIntermitenteIzq) && mContador <= CTE_MAX_BUCLE/2) {
       // Intermitente Izq ON
       iRespuesta2 = iRespuesta2 | CTE_IntermIzqON;	      // ON
+      bIntermitenteIzqON = true;
     }
     if ((bWarnings || bIntermitenteIzq) && mContador > CTE_MAX_BUCLE/2)  {
       // Intermitente Izq OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
+      bIntermitenteIzqON = false;
     }
     if (!bWarnings && !bIntermitenteIzq)  {
       // Intermitente Izq OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
+      bIntermitenteIzqON = false;
     }
     //
     if ((bWarnings || bIntermitenteDer) && mContador <= CTE_MAX_BUCLE/2) {
       // Intermitente Der ON
       iRespuesta2 = iRespuesta2 | CTE_IntermDerON;        // ON
+      bIntermitenteDerON = true;
     }
-    if ((bWarnings || bIntermitenteDer) && mContador > CTE_MAX_BUCLE/2) 
+    if ((bWarnings || bIntermitenteDer) && mContador > CTE_MAX_BUCLE/2) {
       // Intermitente Der OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
-    if (!bWarnings && !bIntermitenteDer) 
+      bIntermitenteDerON = false;
+    }
+    if (!bWarnings && !bIntermitenteDer) {
       // Intermitente Der OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
+      bIntermitenteDerON = false;
+    }
     ////////////////
     // Sirena
     ////////////////
@@ -386,6 +406,14 @@ void gestionarActuadores() {
       iRespuesta1 = iRespuesta1 | CTE_LuzPosON | CTE_LuzTrasON;		        // ON
       else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzPosON & ~CTE_LuzTrasON;	        // OFF
+    // Luz trasera de posición, cruce y carretera
+    if (bCarretera || bCruce || bPosicion) {
+      iRespuesta1 = iRespuesta1 | CTE_LuzTrasON;          // ON  
+    }
+    else {
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzTrasON;         // OFF
+    }
+    //
     if (iGiroRuedas < 40)
       // Luz Giro Iquierdo
       iRespuesta1 = iRespuesta1 | CTE_LuzGirIzqON;	      // ON
