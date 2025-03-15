@@ -19,7 +19,7 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 // GPIO
-#define LED_BUILTIN 4  // Set the GPIO pin where you connected your test LED or comment this line out if your dev board has a built-in LED
+//#define LED_BUILTIN 4  // Set the GPIO pin where you connected your test LED or comment this line out if your dev board has a built-in LED
 #define SENSOR_LUZ  3
 // Pantalla
 #ifdef U8X8_HAVE_HW_SPI
@@ -42,7 +42,7 @@ const char *password      = "12345678";
 String pagina_web;
 String cabeceraHttp;
 String paginaPrincipalGET = "GET /principal?";
-String paginaPrincipal    = "/principal?";
+String paginaPrincipal    = "/principal";
 // Botones ACTIVOS
 boolean bWarnings         = false;
 boolean bIntermitenteIzq  = false;
@@ -53,6 +53,8 @@ boolean bCruce            = false;
 boolean bCarretera        = false;
 boolean bMarchaAtras      = false;
 boolean bLuzTrasera       = false;
+boolean bLuzTraseraAtras  = false;
+boolean bLuzTraseraStop   = false;
 //
 int iUnidadPotencia       = 0;
 int iGiroRuedas           = 0;
@@ -70,7 +72,7 @@ byte CTE_LuzPosON  	      = 0b00010000;	// U2 - QD
 byte CTE_LuzGirIzqON  	  = 0b00001000;	// U2 - QE
 byte CTE_LuzTrasON  	    = 0b00000100;	// U2 - QF
 byte CTE_LuzAtrON  	      = 0b00000010;	// U2 - QG
-byte CTE_LuzMatrON  	    = 0b00000001;	// U2 - QH
+byte CTE_LuzStopON  	    = 0b00000001;	// U2 - QH
 
 // String de salida
 byte iRespuesta1          = 0b00000000;
@@ -81,6 +83,8 @@ int CTE_MAX_BUCLE         = 10;
 int mContador             = CTE_MIN_BUCLE;
 String currentLine        = "";
 int iPosWebPrincipal      = 0;
+int CTE_TEMPS_ESPERA_BUCLE= 150;
+int CTE_TEMPS_REFRESH_HTML= 5;
 // Network
 NetworkServer server(80);
 // Pantalla
@@ -172,7 +176,11 @@ const uint8_t epd_bitmap_int_izq[] =
 
 void setup() {
   // PIN_MODE
-  pinMode(LED_BUILTIN, OUTPUT); // Led interno ESP32C3  
+  //pinMode(LED_BUILTIN, OUTPUT); // Led interno ESP32C3  
+  //
+  pinMode(latchPin, OUTPUT);
+  pinMode(dataPin, OUTPUT);
+  pinMode(clockPin, OUTPUT);
   //
   Serial.begin(115200);
   Serial.println();
@@ -190,7 +198,7 @@ void setup() {
   Serial.print("AP IP address: ");
   Serial.println(myIP);
   Serial.print("LED: ");
-  Serial.println("" + String(LED_BUILTIN));
+  //Serial.println("" + String(LED_BUILTIN));
   server.begin();
   Serial.println("Server started");
   //  Configuración Html
@@ -220,7 +228,12 @@ void loop() {
               // Inicializar pagina web cada vez para los {xx}
               pagina_web = getPaginaWeb();
               // Intercambio de variables
-              intercambioVariables();
+              intercambioVariables();                          
+              // Activar/Desactivar actuadores fijos, luces, etc.
+              gestionarActuadores();
+              // Mostrar en pantalla
+              mostrarPantalla();
+
               /* CLIENT INI */
               // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
               // and a content-type so the client knows what's coming, then a blank line:
@@ -230,6 +243,8 @@ void loop() {
               // The HTTP response ends with another blank line:
               client.println();
               /* CLIENT FIN */
+
+              // break out of the while loop:  
               break;
             }
             // break out of the while loop:
@@ -246,14 +261,15 @@ void loop() {
     client.stop();
     Serial.println("Client Disconnected.");
   }
-  // Activar/Desactivar actuadores
-  gestionarActuadores();
+  else {
+      delay(CTE_TEMPS_ESPERA_BUCLE);  // delay si no atiende a CLIENT
+  }
+  //  Actuadores secuenciales, intermitentes, sirena
+  gestionarActuadoresSecuenciales();
   //  ENVIAR AL ESP32-SERIAL-595
   setRegister();   
-  // Mostrar en pantalla
-  mostrarPantalla();
-  // break out of the while loop:  
 }
+
 void mostrarPantalla() {
   u8g2.clearBuffer();         // clear the internal memory
   //u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
@@ -275,7 +291,6 @@ void mostrarPantalla() {
   if (bIntermitenteDer)
     u8g2.drawXBMP(xOffset + 61, yOffset + 4, 8, 12, epd_bitmap_int_der);
 
-  //u8g2.drawBitmap(u8g2_uint_t x, u8g2_uint_t y, u8g2_uint_t cnt, u8g2_uint_t h, const uint8_t *bitmap)
   u8g2.sendBuffer();          // transfer internal memory to the display
 }
 void setRegister() {
@@ -285,20 +300,35 @@ void setRegister() {
   shiftOut(dataPin, clockPin, LSBFIRST, iRespuesta2); 
   digitalWrite(latchPin, HIGH);
 }
-void gestionarActuadores() {
+void gestionarActuadoresSecuenciales() {
+    if (bWarnings) {
+      bIntermitenteDer = false;                           // DER -> FALSE
+      bIntermitenteIzq = false;                           // IZQ -> FALSE
+    }
     ////////////////
     // Intermitentes
     ////////////////
-    if (bIntermitenteIzq && mContador <= CTE_MAX_BUCLE/2) 
+    if ((bWarnings || bIntermitenteIzq) && mContador <= CTE_MAX_BUCLE/2) {
       // Intermitente Izq ON
       iRespuesta2 = iRespuesta2 | CTE_IntermIzqON;	      // ON
-    if (bIntermitenteIzq && mContador > CTE_MAX_BUCLE/2) 
+    }
+    if ((bWarnings || bIntermitenteIzq) && mContador > CTE_MAX_BUCLE/2)  {
       // Intermitente Izq OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
-    if (bIntermitenteDer && mContador <= CTE_MAX_BUCLE/2) 
+    }
+    if (!bWarnings && !bIntermitenteIzq)  {
+      // Intermitente Izq OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermIzqON;	      // OFF
+    }
+    //
+    if ((bWarnings || bIntermitenteDer) && mContador <= CTE_MAX_BUCLE/2) {
       // Intermitente Der ON
       iRespuesta2 = iRespuesta2 | CTE_IntermDerON;        // ON
-    if (bIntermitenteDer && mContador > CTE_MAX_BUCLE/2) 
+    }
+    if ((bWarnings || bIntermitenteDer) && mContador > CTE_MAX_BUCLE/2) 
+      // Intermitente Der OFF
+      iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
+    if (!bWarnings && !bIntermitenteDer) 
       // Intermitente Der OFF
       iRespuesta2 = iRespuesta2 & ~CTE_IntermDerON;	      // OFF
     ////////////////
@@ -329,30 +359,33 @@ void gestionarActuadores() {
       // Sirena OFF
       iRespuesta2 = iRespuesta2 & ~CTE_SirenaBON;	
       iRespuesta2 = iRespuesta2 & ~CTE_SirenaRON;				
-    }
+    }	
+    ////////////////
+    //  CONTADOR
+    ////////////////
+    if (mContador++ > CTE_MAX_BUCLE-1)
+      mContador = CTE_MIN_BUCLE;
+}
+
+void gestionarActuadores() {
     ////////////////
     // Luces
     ////////////////
     if (bCarretera) 
       // Luces de carretera ON
-      iRespuesta1 = iRespuesta1 | CTE_LuzCarrON;	        // ON
+      iRespuesta1 = iRespuesta1 | CTE_LuzCarrON | CTE_LuzTrasON;	        // ON
       else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzCarrON;	        // OFF
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzCarrON & ~CTE_LuzTrasON;	        // OFF
     if (bCruce) 
       // Luces de cruce ON
-      iRespuesta1 = iRespuesta1 | CTE_LuzCrucON;	        // ON
+      iRespuesta1 = iRespuesta1 | CTE_LuzCrucON | CTE_LuzTrasON;	        // ON
       else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzCrucON;	        // OFF
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzCrucON & ~CTE_LuzTrasON;	        // OFF
     if (bPosicion) 
       // Luces de posición ON
-      iRespuesta1 = iRespuesta1 | CTE_LuzPosON;		        // ON
+      iRespuesta1 = iRespuesta1 | CTE_LuzPosON | CTE_LuzTrasON;		        // ON
       else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzPosON;	        // OFF
-    if (bCarretera || bCruce || bPosicion)
-      // Luz de la matrícula
-      iRespuesta1 = iRespuesta1 | CTE_LuzMatrON;		      // ON
-    else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzMatrON;	        // OFF
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzPosON & ~CTE_LuzTrasON;	        // OFF
     if (iGiroRuedas < 40)
       // Luz Giro Iquierdo
       iRespuesta1 = iRespuesta1 | CTE_LuzGirIzqON;	      // ON
@@ -363,33 +396,29 @@ void gestionarActuadores() {
       iRespuesta1 = iRespuesta1 | CTE_LuzGirDerON;	      // ON
     else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzGirDerON;	      // OFF
-    if (bMarchaAtras) 
+    if (bLuzTraseraAtras) 
       // Luces de marcha atrás
       iRespuesta1 = iRespuesta1 | CTE_LuzAtrON;		        // ON
       else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzAtrON;	        // OFF
-    if (bLuzTrasera) 
+    if (bLuzTraseraStop) 
       // Luz trasera Freno/STOP
-      iRespuesta1 = iRespuesta1 | CTE_LuzTrasON;          // ON
+      iRespuesta1 = iRespuesta1 | CTE_LuzStopON;          // ON
       else
-      iRespuesta1 = iRespuesta1 & ~CTE_LuzTrasON;	        // OFF
-    ////////////////
-    //  CONTADOR
-    ////////////////
-    if (mContador++ > CTE_MAX_BUCLE)
-      mContador = CTE_MIN_BUCLE;
-
+      iRespuesta1 = iRespuesta1 & ~CTE_LuzStopON;	        // OFF
 }
 void gestionarPeticiones(String pCurrentLine) {
     // INTERMITENTE - DERECHO - S/N
     int iPos = pCurrentLine.indexOf("IND=");
     if (iPos >= 0) {
       bIntermitenteDer = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
+      bIntermitenteIzq = false;
     }
     // INTERMITENTE - IZQUIERDO - S/N
     iPos = pCurrentLine.indexOf("INI=");
     if (iPos >= 0) {
       bIntermitenteIzq = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
+      bIntermitenteDer = false;
     }
     // WARNINGS - S/N
     iPos = pCurrentLine.indexOf("WAR=");
@@ -431,12 +460,12 @@ void gestionarPeticiones(String pCurrentLine) {
     // LUZ MARCHA ATRÁS - S/N
     iPos = pCurrentLine.indexOf("MAT=");
     if (iPos >= 0) {
-      bMarchaAtras = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
+      bLuzTraseraAtras = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
     // LUZ TRASERA FRENO/STOP - S/N
     iPos = pCurrentLine.indexOf("FRE=");
     if (iPos >= 0) {
-      bLuzTrasera = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
+      bLuzTraseraStop = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
 
 }
@@ -444,8 +473,10 @@ void gestionarPeticiones(String pCurrentLine) {
 String getSensorLuz() {
   // Sensor de LUZ
   int sensorLuz = analogRead(SENSOR_LUZ);                      // PIN 3
-  int valorLuz = map(sensorLuz,0,4095,0,100); 
-  return String(valorLuz);
+  int valorLuz = map(sensorLuz,0,4095,0,1000); 
+  int iNum = valorLuz / 10;
+  int iDec = valorLuz % 10;  
+  return String(iNum) + "." + String(iDec);
 }
 
 void intercambioVariables() {
@@ -458,75 +489,75 @@ void intercambioVariables() {
   // Luces de POSICION
   if (bPosicion) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{10}", "<a href=\"."+paginaPrincipal+"LPO=N\">APAGAR</a>");
+    pagina_web.replace("{10}", "<a href=\"."+paginaPrincipal+"?LPO=N\">APAGAR</a>");
   }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{10}", "<a href=\"."+paginaPrincipal+"LPO=S\">ENCENDER</a>");
+    pagina_web.replace("{10}", "<a href=\"."+paginaPrincipal+"?LPO=S\">ENCENDER</a>");
   }
   // Luces de CRUCE
   if (bCruce) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{11}", "<a href=\"."+paginaPrincipal+"LCR=N\">APAGAR</a>");
+    pagina_web.replace("{11}", "<a href=\"."+paginaPrincipal+"?LCR=N\">APAGAR</a>");
     }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{11}", "<a href=\"."+paginaPrincipal+"LCR=S\">ENCENDER</a>");
+    pagina_web.replace("{11}", "<a href=\"."+paginaPrincipal+"?LCR=S\">ENCENDER</a>");
   }
   // Luces de CARRETERA
   if (bCarretera) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{12}", "<a href=\"."+paginaPrincipal+"LCA=N\">APAGAR</a>");
+    pagina_web.replace("{12}", "<a href=\"."+paginaPrincipal+"?LCA=N\">APAGAR</a>");
     }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{12}", "<a href=\"."+paginaPrincipal+"LCA=S\">ENCENDER</a>");
+    pagina_web.replace("{12}", "<a href=\"."+paginaPrincipal+"?LCA=S\">ENCENDER</a>");
   }
   if (bWarnings) {
-    pagina_web.replace("{13}", "<a href=\"."+paginaPrincipal+"WAR=N\">APAGAR</a>");
+    pagina_web.replace("{13}", "<a href=\"."+paginaPrincipal+"?WAR=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{13}", "<a href=\"."+paginaPrincipal+"WAR=S\">ENCENDER</a>");
+    pagina_web.replace("{13}", "<a href=\"."+paginaPrincipal+"?WAR=S\">ENCENDER</a>");
   }
   if (bSirena) {
-    pagina_web.replace("{14}", "<a href=\"."+paginaPrincipal+"SIR=N\">APAGAR</a>");
+    pagina_web.replace("{14}", "<a href=\"."+paginaPrincipal+"?SIR=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{14}", "<a href=\"."+paginaPrincipal+"SIR=S\">ENCENDER</a>");
+    pagina_web.replace("{14}", "<a href=\"."+paginaPrincipal+"?SIR=S\">ENCENDER</a>");
   }  
   if (bIntermitenteIzq) {
-    pagina_web.replace("{15}", "<a href=\"."+paginaPrincipal+"INI=N\">APAGAR</a>");
+    pagina_web.replace("{15}", "<a href=\"."+paginaPrincipal+"?INI=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{15}", "<a href=\"."+paginaPrincipal+"INI=S\">ENCENDER</a>");
+    pagina_web.replace("{15}", "<a href=\"."+paginaPrincipal+"?INI=S\">ENCENDER</a>");
   }  
   if (bIntermitenteDer) {
-    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"IND=N\">APAGAR</a>");
+    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"?IND=N\">APAGAR</a>");
   }
   else {
-    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"IND=S\">ENCENDER</a>");
+    pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"?IND=S\">ENCENDER</a>");
   }  
   // Sensor proximidad DELANTERO
   pagina_web.replace("{0}", "0");        // Sensor proximidad DELANTERO
   // Sensor proximidad TRASERO
   pagina_web.replace("{1}", "0");         // Sensor proximidad TRASERO
   // Marcha atrás
-  if (bMarchaAtras) {
+  if (bLuzTraseraAtras) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{2}", "<a href=\"."+paginaPrincipal+"MAT=N\">QUITAR</a>");
+    pagina_web.replace("{2}", "<a href=\"."+paginaPrincipal+"?MAT=N\">QUITAR</a>");
   }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{2}", "<a href=\"."+paginaPrincipal+"MAT=S\">PONER</a>");
+    pagina_web.replace("{2}", "<a href=\"."+paginaPrincipal+"?MAT=S\">PONER</a>");
   }
   // Freno-STOP
-  if (bLuzTrasera) {
+  if (bLuzTraseraStop) {
     // Enciende las luces y muestra el enlace de APAGAR
-    pagina_web.replace("{3}", "<a href=\"."+paginaPrincipal+"FRE=N\">SOLTAR</a>");
+    pagina_web.replace("{3}", "<a href=\"."+paginaPrincipal+"?FRE=N\">SOLTAR</a>");
   }
   else {
     // Apaga las luces y muestra el enlace de ENCENDER
-    pagina_web.replace("{3}", "<a href=\"."+paginaPrincipal+"FRE=S\">FRENAR</a>");
+    pagina_web.replace("{3}", "<a href=\"."+paginaPrincipal+"?FRE=S\">FRENAR</a>");
   }
 }
 String getCabeceraHttp() {
@@ -541,7 +572,7 @@ String getPaginaWeb() {
   strPaginaWeb += String("<head>");
   strPaginaWeb += String("<title>CACA_ESP32_C3 - C a r</title>");
   strPaginaWeb += String("<meta charset=\"UTF-8\">");
-//  strPaginaWeb += String("<meta http-equiv=\"refresh\" content=\"100; url=./vacio\">");
+  //strPaginaWeb += String("<meta http-equiv=\"refresh\" content=\""+String(CTE_TEMPS_REFRESH_HTML)+"; url=."+paginaPrincipal+"?REFRESH\">");
   strPaginaWeb += String("</head>");
   strPaginaWeb += String("<html>");
   strPaginaWeb += String("<body>");
@@ -559,7 +590,7 @@ String getPaginaWeb() {
   strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");  
   strPaginaWeb += String("<tr><td>Sensor proximidad DELANTERO</td><td>{0}&percnt;</td></tr>");
   strPaginaWeb += String("<tr><td>Sensor proximidad TRASERO</td><td>{1}&percnt;</td></tr>");
-  strPaginaWeb += String("<tr><td>Sensor Luz</td><td>{17}</td></tr>");
+  strPaginaWeb += String("<tr><td>Sensor Luz</td><td>{17}&percnt;</td></tr>");
 
   strPaginaWeb += String("<tr><td>Marcha atrás</td><td>{2}</td></tr>");
   strPaginaWeb += String("<tr><td>Freno-STOP</td><td>{3}</td></tr>");
@@ -567,32 +598,32 @@ String getPaginaWeb() {
   strPaginaWeb += String("<tr><td>Unidad de potencia</td><td>{18}&percnt;</td></tr>");
   strPaginaWeb += String("<tr>");
 	strPaginaWeb += String("<td  colspan=2 align=\"center\">");
-	strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=00\">PARAR</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=10\">10&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=20\">20&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=30\">30&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=40\">40&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=50\">50&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=60\">60&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=70\">70&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=80\">80&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=90\">90&percnt;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"UPO=99\">MAX VELOCIDAD</a>&rsqb;");
+	strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=00\">PARAR</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=10\">10&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=20\">20&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=30\">30&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=40\">40&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=50\">50&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=60\">60&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=70\">70&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=80\">80&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=90\">90&percnt;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?UPO=99\">MAX VELOCIDAD</a>&rsqb;");
   strPaginaWeb += String("</td>");
   strPaginaWeb += String("</tr>");
   strPaginaWeb += String("<tr><td colspan=2>&nbsp;</td></tr>");
   strPaginaWeb += String("<tr><td>Giro ruedas delanteras</td><td>{19}&deg;</td></tr>");
   strPaginaWeb += String("<tr>");
 	strPaginaWeb += String("<td  colspan=2 align=\"center\">");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=10\">-40&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=20\">-30&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=30\">-20&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=40\">-10&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=50\">RECTO</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=60\">+10&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=70\">+20&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=80\">+30&deg;</a>&rsqb;");
-  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"GRU=90\">+40&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=10\">-40&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=20\">-30&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=30\">-20&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=40\">-10&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=50\">RECTO</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=60\">+10&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=70\">+20&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=80\">+30&deg;</a>&rsqb;");
+  strPaginaWeb += String("&lsqb;<a href=\"."+paginaPrincipal+"?GRU=90\">+40&deg;</a>&rsqb;");
   strPaginaWeb += String("</td>");
   strPaginaWeb += String("</tr>");
   strPaginaWeb += String("</table>");
