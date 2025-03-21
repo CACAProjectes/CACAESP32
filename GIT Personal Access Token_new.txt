@@ -15,5 +15,8 @@ git push -u https:// CACAProjectes : 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 @ 
 
 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
 
+<<<<<<< ours
 
 
+=======
+>>>>>>> theirs
