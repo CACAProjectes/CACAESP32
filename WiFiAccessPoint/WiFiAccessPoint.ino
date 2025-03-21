@@ -9,6 +9,8 @@
 
   Created for arduino-esp32 on 04 July, 2018
   by Elochukwu Ifediora (fedy0)
+
+  Reescrito por JJCP 21/03/2025
 */
 
 #include <WiFi.h>
