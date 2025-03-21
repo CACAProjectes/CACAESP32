@@ -40,6 +40,7 @@ const char *ssid          = "CACA_ESP32_C3";
 const char *password      = "12345678";
 // Set VAR PAGINA HTML
 String pagina_web;
+String pagina_web_refresh;
 String cabeceraHttp;
 String paginaPrincipalGET = "GET /principal?";
 String paginaPrincipal    = "/principal";
@@ -57,9 +58,10 @@ boolean bLuzTraseraAtras  = false;
 boolean bLuzTraseraStop   = false;
 boolean bIntermitenteIzqON= false;
 boolean bIntermitenteDerON= false;
+boolean bSensorLuz        = false;
 //
 int iUnidadPotencia       = 0;
-int iGiroRuedas           = 0;
+int iGiroRuedas           = 50;         // [RECTO]
 // Máscaras de LUCES
 byte CTE_IntermDerON      = 0b10000000;	// U1 - QA
 byte CTE_IntermIzqON      = 0b01000000;	// U1 - QB
@@ -86,15 +88,16 @@ int mContador             = CTE_MIN_BUCLE;
 String currentLine        = "";
 int iPosWebPrincipal      = 0;
 int CTE_TEMPS_ESPERA_BUCLE= 150;
-int CTE_TEMPS_REFRESH_HTML= 5;
+int CTE_TEMPS_REFRESH_HTML= 2;
+int CTE_LIMITE_LUZ        = 750;
 // Network
 NetworkServer server(80);
 // Pantalla
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, 6, 5);
-int width = 72; 
-int height = 40; 
-int xOffset = 30; // = (132-w)/2 
-int yOffset = 12; // = (64-h)/2 
+int width                 = 72; 
+int height                = 40; 
+int xOffset               = 30; // = (132-w)/2 
+int yOffset               = 12; // = (64-h)/2 
 
 const uint8_t epd_bitmap_luz_posicion[] = 
 {   
@@ -211,6 +214,8 @@ void setup() {
   u8g2.setContrast(255); // maximum contrast 
   u8g2.setBusClock(400000);   // 400kHz I2C 
   u8g2.setFont(u8g2_font_ncenB10_tr); 
+  // Primera pantalla
+  mostrarPantallaBienvenida();
 }
 
 void loop() {
@@ -252,6 +257,17 @@ void loop() {
               // break out of the while loop:  
               break;
             }
+            // No es una petición CIENT de GET
+            /* CLIENT INI - REFRESH*/
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.print(cabeceraHttp);
+            // Página Web REFRESH
+            pagina_web_refresh = getPaginaWebRefresh();
+            client.print(pagina_web_refresh);
+            // The HTTP response ends with another blank line:
+            client.println();
+            /* CLIENT FIN */
             // break out of the while loop:
             break;
           } else {  // if you got a newline, then clear currentLine:
@@ -278,7 +294,13 @@ void loop() {
   //  ENVIAR AL ESP32-SERIAL-595
   setRegister();   
 }
-
+void mostrarPantallaBienvenida() {
+  u8g2.clearBuffer();                     // clear the internal memory
+  u8g2.drawFrame(xOffset, yOffset, 72, 40);
+  u8g2.setCursor(xOffset + 5, yOffset + 15); 
+  u8g2.printf("%s", "HiCACA!");                // write something to the internal memory
+  u8g2.sendBuffer();                      // transfer internal memory to the display  
+}
 void mostrarPantalla() {
   u8g2.clearBuffer();                     // clear the internal memory
     
@@ -300,9 +322,12 @@ void mostrarPantalla() {
     u8g2.drawXBMP(xOffset + 61, yOffset + 4, 8, 12, epd_bitmap_int_der);
   //  Velocidad Unidad de Potencia
   u8g2.setCursor(xOffset + 25, yOffset + 35); 
-  u8g2.printf("%0d", iUnidadPotencia);                // write something to the internal memory
+  if (iUnidadPotencia<10)
+    u8g2.printf("0%d", iUnidadPotencia);    // write something to the internal memory
+  else
+    u8g2.printf("%d", iUnidadPotencia);     // write something to the internal memory
 
-  u8g2.sendBuffer();                      // transfer internal memory to the display
+  u8g2.sendBuffer();                        // transfer internal memory to the display
 }
 void setRegister() {
   // Bloquea el Serial 595, envía el byte1 y después el byte2 y desbloque el Serial 595
@@ -388,6 +413,9 @@ void gestionarActuadoresSecuenciales() {
 }
 
 void gestionarActuadores() {
+   // Sensor de Luz
+    int iLuz = getSensorLuzInt() ;
+    bSensorLuz = (iLuz < CTE_LIMITE_LUZ);
     ////////////////
     // Luces
     ////////////////
@@ -396,24 +424,24 @@ void gestionarActuadores() {
       iRespuesta1 = iRespuesta1 | CTE_LuzCarrON | CTE_LuzTrasON;	        // ON
       else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzCarrON & ~CTE_LuzTrasON;	        // OFF
-    if (bCruce) 
+    if (bCruce || bSensorLuz) 
       // Luces de cruce ON
       iRespuesta1 = iRespuesta1 | CTE_LuzCrucON | CTE_LuzTrasON;	        // ON
       else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzCrucON & ~CTE_LuzTrasON;	        // OFF
-    if (bPosicion) 
+    if (bPosicion || bSensorLuz) 
       // Luces de posición ON
       iRespuesta1 = iRespuesta1 | CTE_LuzPosON | CTE_LuzTrasON;		        // ON
       else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzPosON & ~CTE_LuzTrasON;	        // OFF
     // Luz trasera de posición, cruce y carretera
-    if (bCarretera || bCruce || bPosicion) {
+    if (bCarretera || bCruce || bPosicion || bSensorLuz) {
       iRespuesta1 = iRespuesta1 | CTE_LuzTrasON;          // ON  
     }
     else {
       iRespuesta1 = iRespuesta1 & ~CTE_LuzTrasON;         // OFF
     }
-    //
+    //  GIRO DE RUEDAS
     if (iGiroRuedas < 40)
       // Luz Giro Iquierdo
       iRespuesta1 = iRespuesta1 | CTE_LuzGirIzqON;	      // ON
@@ -424,6 +452,7 @@ void gestionarActuadores() {
       iRespuesta1 = iRespuesta1 | CTE_LuzGirDerON;	      // ON
     else
       iRespuesta1 = iRespuesta1 & ~CTE_LuzGirDerON;	      // OFF
+    // LUCES TRASERAS
     if (bLuzTraseraAtras) 
       // Luces de marcha atrás
       iRespuesta1 = iRespuesta1 | CTE_LuzAtrON;		        // ON
@@ -498,10 +527,15 @@ void gestionarPeticiones(String pCurrentLine) {
 
 }
 
-String getSensorLuz() {
+int getSensorLuzInt() {
   // Sensor de LUZ
   int sensorLuz = analogRead(SENSOR_LUZ);                      // PIN 3
   int valorLuz = map(sensorLuz,0,4095,0,1000); 
+  return valorLuz;  
+}
+String getSensorLuz() {
+  // Sensor de LUZ
+  int valorLuz = getSensorLuzInt();
   int iNum = valorLuz / 10;
   int iDec = valorLuz % 10;  
   return String(iNum) + "." + String(iDec);
@@ -593,14 +627,31 @@ String getCabeceraHttp() {
   strCabHttp += String("Content-type:text/html\n\n");
   return strCabHttp;
 }
-// Set VAR PAGINA HTML
+// Get
+String getPaginaWebRefresh() {
+  String strPaginaWeb = String("<!doctype html>");
+  strPaginaWeb += String("<html lang=\"es\">");
+  strPaginaWeb += String("<head>");
+  strPaginaWeb += String("<title>CACA_ESP32_C3 - C a r</title>");
+  strPaginaWeb += String("<meta charset=\"UTF-8\">");
+  strPaginaWeb += String("</head>");
+  strPaginaWeb += String("<html>");
+  strPaginaWeb += String("<body>");
+
+  strPaginaWeb += String("Página REFRESH");
+ 
+  strPaginaWeb += String("</body>");
+  strPaginaWeb += String("</html>");
+  return strPaginaWeb;
+}
+// Get VAR PAGINA HTML
 String getPaginaWeb() {
   String strPaginaWeb = String("<!doctype html>");
   strPaginaWeb += String("<html lang=\"es\">");
   strPaginaWeb += String("<head>");
   strPaginaWeb += String("<title>CACA_ESP32_C3 - C a r</title>");
   strPaginaWeb += String("<meta charset=\"UTF-8\">");
-  //strPaginaWeb += String("<meta http-equiv=\"refresh\" content=\""+String(CTE_TEMPS_REFRESH_HTML)+"; url=."+paginaPrincipal+"?REFRESH\">");
+  strPaginaWeb += String("<meta http-equiv=\"refresh\" content=\""+String(CTE_TEMPS_REFRESH_HTML)+"; url=."+paginaPrincipal+"?REFRESH\">");
   strPaginaWeb += String("</head>");
   strPaginaWeb += String("<html>");
   strPaginaWeb += String("<body>");
