@@ -47,7 +47,7 @@
 #endif
 */
 
-#define LED_BUILTIN 8
+#define LED_BUILTIN 8 // 8 - led azul de la placa ESP32-C3
 
 // the setup function runs once when you press reset or power the board
 void setup() {
