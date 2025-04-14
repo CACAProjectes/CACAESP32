@@ -22,7 +22,9 @@
 #include <U8g2lib.h>
 // GPIO
 //#define LED_BUILTIN 4  // Set the GPIO pin where you connected your test LED or comment this line out if your dev board has a built-in LED
-#define SENSOR_LUZ  3
+#define SENSOR_LUZ      0
+#define SENSOR_POS_TRA  1
+#define SENSOR_POS_DEL  2
 // Pantalla
 #ifdef U8X8_HAVE_HW_SPI
 #include <SPI.h>
@@ -34,6 +36,7 @@
 #define SCL_PIN 6
 
 // DATOS EN SERIE
+const int buzzerPin       = 7;   // BUZZER
 const int dataPin         = 8;   // SER
 const int clockPin        = 9;   // SRCLK
 const int latchPin        = 10;  // RCLK
@@ -61,6 +64,7 @@ boolean bLuzTraseraStop   = false;
 boolean bIntermitenteIzqON= false;
 boolean bIntermitenteDerON= false;
 boolean bSensorLuz        = false;
+boolean bBuzzer           = false;
 //
 int iUnidadPotencia       = 0;
 int iGiroRuedas           = 50;         // [RECTO]
@@ -92,14 +96,17 @@ int iPosWebPrincipal      = 0;
 int CTE_TEMPS_ESPERA_BUCLE= 150;
 int CTE_TEMPS_REFRESH_HTML= 2;
 int CTE_LIMITE_LUZ        = 750;
+int CTE_LIMITE_POS_DEL    = 500;
+int CTE_LIMITE_POS_TRA    = 500;
+int CTE_FRECUENCIA_BUZZER = 2000;       // Send 1KHz sound signal...
 // Network
 NetworkServer server(80);
 // Pantalla
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, 6, 5);
 int width                 = 72; 
 int height                = 40; 
-int xOffset               = 30; // = (132-w)/2 
-int yOffset               = 12; // = (64-h)/2 
+int xOffset               = 30;         // = (132-w)/2 
+int yOffset               = 12;         // = (64-h)/2 
 
 const uint8_t epd_bitmap_luz_posicion[] = 
 {   
@@ -183,11 +190,12 @@ const uint8_t epd_bitmap_int_izq[] =
 
 void setup() {
   // PIN_MODE
-  //pinMode(LED_BUILTIN, OUTPUT); // Led interno ESP32C3  
+  //pinMode(LED_BUILTIN, OUTPUT);   // Led interno ESP32C3  
   //
   pinMode(latchPin, OUTPUT);
   pinMode(dataPin, OUTPUT);
   pinMode(clockPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);       // Set buzzer - pin 9 as an output
   //
   Serial.begin(115200);
   Serial.println();
@@ -204,7 +212,7 @@ void setup() {
   IPAddress myIP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(myIP);
-  Serial.print("LED: ");
+  //Serial.print("LED: ");
   //Serial.println("" + String(LED_BUILTIN));
   server.begin();
   Serial.println("Server started");
@@ -290,7 +298,7 @@ void loop() {
   //  Actuadores secuenciales, intermitentes, sirena
   gestionarActuadoresSecuenciales();
   //  Mostrar intermitentes en Pantalla
-  if (bWarnings || bIntermitenteIzq || bIntermitenteDer) {
+  if (bWarnings || bIntermitenteIzq || bIntermitenteDer || bSensorLuz) {
     mostrarPantalla();
   }
   //  ENVIAR AL ESP32-SERIAL-595
@@ -299,8 +307,8 @@ void loop() {
 void mostrarPantallaBienvenida() {
   u8g2.clearBuffer();                     // clear the internal memory
   u8g2.drawFrame(xOffset, yOffset, 72, 40);
-  u8g2.setCursor(xOffset + 5, yOffset + 15); 
-  u8g2.printf("%s", "HiCACA!");                // write something to the internal memory
+  u8g2.setCursor(xOffset + 5, yOffset + 25); 
+  u8g2.printf("%s", "HiCACA!");           // write something to the internal memory
   u8g2.sendBuffer();                      // transfer internal memory to the display  
 }
 void mostrarPantalla() {
@@ -311,10 +319,10 @@ void mostrarPantalla() {
   if ((bWarnings || bIntermitenteIzq) && bIntermitenteIzqON)
     u8g2.drawXBMP(xOffset + 3, yOffset + 4, 8, 12, epd_bitmap_int_izq);
   // Luces de POSICION
-  if (bPosicion)
+  if (bPosicion || bSensorLuz)
     u8g2.drawXBMP(xOffset + 10, yOffset + 4, 16, 12, epd_bitmap_luz_posicion);
   // Luces de CRUCE
-  if (bCruce)
+  if (bCruce || bSensorLuz)
     u8g2.drawXBMP(xOffset + 26, yOffset + 4, 16, 12, epd_bitmap_luz_cruce);
   // Luces de CARRETERA
   if (bCarretera)
@@ -339,6 +347,14 @@ void setRegister() {
   digitalWrite(latchPin, HIGH);
 }
 void gestionarActuadoresSecuenciales() {
+    // BUZZER
+    if (!bBuzzer && mContador > CTE_MAX_BUCLE/2) {
+      noTone(buzzerPin);                      // Stop sound...
+    }
+    if (bBuzzer && mContador <= CTE_MAX_BUCLE/2) {
+      tone(buzzerPin, CTE_FRECUENCIA_BUZZER); // Send 1KHz sound signal...
+      bBuzzer = false;
+    }
     // Warnings
     if (bWarnings) {
       bIntermitenteDer = false;                           // DER -> FALSE
@@ -489,6 +505,11 @@ void gestionarPeticiones(String pCurrentLine) {
     if (iPos >= 0) {
       bSirena = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
     }
+    // CLAXON - S/N
+    iPos = pCurrentLine.indexOf("CLA=");
+    if (iPos >= 0) {
+      bBuzzer = (pCurrentLine.substring(iPos+4, iPos+4+1) == "S");
+    }
     // LUCES DE POSICION - S/N
     iPos = pCurrentLine.indexOf("LPO=");
     if (iPos >= 0) {
@@ -528,18 +549,28 @@ void gestionarPeticiones(String pCurrentLine) {
     }
 
 }
-
+int getSensorPosicionDel() {
+  // Sensor de posición delantero
+  int sensorPosDel = analogRead(SENSOR_POS_DEL);        // PIN 2
+  int valor = map(sensorPosDel,0,4095,0,1000); 
+  return valor;  
+}
+int getSensorPosicionTra() {
+  // Sensor de posición delantero
+  int sensorPosTra = analogRead(SENSOR_POS_TRA);        // PIN 5
+  int valor = map(sensorPosTra,0,4095,0,1000); 
+  return valor;  
+}
 int getSensorLuzInt() {
   // Sensor de LUZ
-  int sensorLuz = analogRead(SENSOR_LUZ);                      // PIN 3
+  int sensorLuz = analogRead(SENSOR_LUZ);               // PIN 3
   int valorLuz = map(sensorLuz,0,4095,0,1000); 
   return valorLuz;  
 }
-String getSensorLuz() {
+String convertSensor2String(int pValor) {
   // Sensor de LUZ
-  int valorLuz = getSensorLuzInt();
-  int iNum = valorLuz / 10;
-  int iDec = valorLuz % 10;  
+  int iNum = pValor / 10;
+  int iDec = pValor % 10;  
   return String(iNum) + "." + String(iDec);
 }
 
@@ -549,7 +580,20 @@ void intercambioVariables() {
   // Giro de ruedas
   pagina_web.replace("{19}", String(iGiroRuedas));
   // Sensor de LUZ
-  pagina_web.replace("{17}", getSensorLuz());
+  pagina_web.replace("{17}", convertSensor2String(getSensorLuzInt()));
+  // Sensor proximidad DELANTERO
+  pagina_web.replace("{0}", convertSensor2String(getSensorPosicionDel()));  // Sensor proximidad DELANTERO
+  // Sensor proximidad TRASERO
+  pagina_web.replace("{1}", convertSensor2String(getSensorPosicionTra()));  // Sensor proximidad TRASERO
+  // CLAXON
+  if (bBuzzer) {
+    // Toca el CLAXON
+    pagina_web.replace("{20}", "<a href=\"."+paginaPrincipal+"?CLA=S\">CLAXON</a>");
+  }  
+  else {
+    // Toca el CLAXON
+    pagina_web.replace("{20}", "<a href=\"."+paginaPrincipal+"?CLA=S\">CLAXON</a>");
+  }  
   // Luces de POSICION
   if (bPosicion) {
     // Enciende las luces y muestra el enlace de APAGAR
@@ -601,10 +645,6 @@ void intercambioVariables() {
   else {
     pagina_web.replace("{16}", "<a href=\"."+paginaPrincipal+"?IND=S\">ENCENDER</a>");
   }  
-  // Sensor proximidad DELANTERO
-  pagina_web.replace("{0}", "0");        // Sensor proximidad DELANTERO
-  // Sensor proximidad TRASERO
-  pagina_web.replace("{1}", "0");         // Sensor proximidad TRASERO
   // Marcha atrás
   if (bLuzTraseraAtras) {
     // Enciende las luces y muestra el enlace de APAGAR
@@ -660,6 +700,7 @@ String getPaginaWeb() {
   //
   strPaginaWeb += String("<table border=0>");
   strPaginaWeb += String("<tr><td colspan=\"2\" align=\"center\">C A R</td></tr>");
+  strPaginaWeb += String("<tr><td>CLAXON</a></td><td>{20}</td></tr>");
   strPaginaWeb += String("<tr><td>LUCES POSICI&Oacute;N</a></td><td>{10}</td></tr>");
   strPaginaWeb += String("<tr><td>LUCES CRUCE</a></td><td>{11}</td></tr>");
   strPaginaWeb += String("<tr><td>LUCES CARRETERA</a></td><td>{12}</td></tr>");
