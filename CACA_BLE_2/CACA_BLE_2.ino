@@ -32,7 +32,8 @@ void loop() {
 
 class MyCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
+    //std::string value = pCharacteristic->getValue();
+    String value = pCharacteristic->getValue();
     if (value == "ON") {
       ledState = true;
     } else if (value == "OFF") {
