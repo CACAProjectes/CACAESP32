@@ -28,7 +28,7 @@ class MyCallbacks : public BLECharacteristicCallbacks {
         Serial.println();
       }
     }
-};
+};	
 
 // Callback para manejar conexiones y desconexiones
 class MyServerCallbacks : public BLEServerCallbacks {

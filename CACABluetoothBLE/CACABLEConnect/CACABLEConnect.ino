@@ -25,7 +25,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
       deviceConnected = false;
       Serial.println("Dispositivo desconectado");
     }
-};
+};	
 
 void setup() {
   Serial.begin(115200);
