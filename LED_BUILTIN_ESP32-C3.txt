@@ -1,0 +1,1 @@
+#define LED_BUILTIN 8 // 8 - led azul de la placa ESP32-C3
